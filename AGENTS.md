@@ -1,6 +1,6 @@
 # AGENTS.md
 
-> 开始协作前，请先在 `Collaborators` 中添加自己的名字。  
+> 开始协作前，请先在 `Collaborators，author name` 中添加自己的名字。  
 > 这样 Agent 在生成脚本头注释、Changelog、Git commit、PR 描述时，可以自动带出正确的协作者名字。
 
 ## Collaborators
