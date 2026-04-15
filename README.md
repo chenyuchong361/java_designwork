@@ -75,3 +75,7 @@ run.bat
 mvn test
 ```
 
+## 协作规范
+
+按照AGENTS.md添加个人信息后与agent协作进行代码修改
+
