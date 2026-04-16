@@ -5,9 +5,9 @@
 
 ## Collaborators
 
-- <Your Name>
-- <Your Name>
-- <AI Agent reviewed by <Your Name>>
+- 陈宗波
+- Codex
+- AI Agent reviewed by 陈宗波
 
 ---
 
