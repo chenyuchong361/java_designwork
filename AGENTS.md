@@ -6,9 +6,6 @@
 ## Collaborators
 
 - 陈宗波
-- Codex
-- AI Agent reviewed by 陈宗波
-
 ---
 
  Script Header Template
