@@ -5,7 +5,7 @@
 
 ## Collaborators
 
-- 陈宗波
+- chenzongbo
 
 ---
 
