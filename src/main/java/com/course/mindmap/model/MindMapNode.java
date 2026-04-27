@@ -1,14 +1,31 @@
+/*
+Script: MindMapNode.java
+Purpose: Represent a mind map node, including hierarchy and custom visual style settings.
+Author: chenyuchong
+Created: 2026-03-14
+Last Updated: 2026-04-27
+Dependencies: java.util
+Usage: Used by the document, UI, and file persistence layers to manage node data.
+
+Changelog:
+- 2026-03-14 chenyuchong: Initial creation.
+- 2026-04-27 Codex: Added per-node text, fill, and line color properties for customizable rendering. Original author: chenyuchong. Reason: support user-controlled node styling that can be saved and restored. Impact: backward compatible.
+*/
 package com.course.mindmap.model;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
 
 public class MindMapNode {
     private final String id;
     private String text;
+    private String textColorHex;
+    private String fillColorHex;
+    private String lineColorHex;
     private MindMapNode parent;
     private final List<MindMapNode> children = new ArrayList<>();
 
@@ -31,7 +48,31 @@ public class MindMapNode {
 
     public void setText(String text) {
         String normalized = text == null ? "" : text.strip();
-        this.text = normalized.isBlank() ? "新节点" : normalized;
+        this.text = normalized.isBlank() ? "\u65b0\u8282\u70b9" : normalized;
+    }
+
+    public String getTextColorHex() {
+        return textColorHex;
+    }
+
+    public void setTextColorHex(String textColorHex) {
+        this.textColorHex = normalizeColorHex(textColorHex);
+    }
+
+    public String getFillColorHex() {
+        return fillColorHex;
+    }
+
+    public void setFillColorHex(String fillColorHex) {
+        this.fillColorHex = normalizeColorHex(fillColorHex);
+    }
+
+    public String getLineColorHex() {
+        return lineColorHex;
+    }
+
+    public void setLineColorHex(String lineColorHex) {
+        this.lineColorHex = normalizeColorHex(lineColorHex);
     }
 
     public MindMapNode getParent() {
@@ -85,6 +126,16 @@ public class MindMapNode {
         }
     }
 
+    public boolean hasCustomStyle() {
+        return textColorHex != null || fillColorHex != null || lineColorHex != null;
+    }
+
+    public void clearCustomStyle() {
+        textColorHex = null;
+        fillColorHex = null;
+        lineColorHex = null;
+    }
+
     public MindMapNode findById(String nodeId) {
         if (id.equals(nodeId)) {
             return this;
@@ -106,9 +157,26 @@ public class MindMapNode {
         return count;
     }
 
+    private String normalizeColorHex(String colorHex) {
+        if (colorHex == null) {
+            return null;
+        }
+
+        String normalized = colorHex.strip().toUpperCase(Locale.ROOT);
+        if (normalized.isEmpty()) {
+            return null;
+        }
+        if (normalized.startsWith("#")) {
+            normalized = normalized.substring(1);
+        }
+        if (!normalized.matches("[0-9A-F]{6}")) {
+            throw new IllegalArgumentException("Color value must be a 6-digit hex string.");
+        }
+        return "#" + normalized;
+    }
+
     @Override
     public String toString() {
         return text;
     }
 }
-

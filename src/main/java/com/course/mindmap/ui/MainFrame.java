@@ -1,6 +1,6 @@
 /*
 Script: MainFrame.java
-Purpose: Build the main application window and coordinate mind map editing actions.
+Purpose: Build the main application window and coordinate mind map editing, file actions, and node styling.
 Author: chenyuchong
 Created: 2026-03-14
 Last Updated: 2026-04-27
@@ -10,6 +10,7 @@ Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interaction
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
 - 2026-04-27 Codex: Added canvas node context menu actions and synchronized them with existing edit commands. Original author: chenyuchong. Reason: allow right-click editing directly on nodes in the drawing area. Impact: backward compatible.
+- 2026-04-27 Codex: Added per-node text, fill, and line color editing actions with style persistence support. Original author: chenyuchong. Reason: allow users to customize module appearance directly in the application. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -18,6 +19,7 @@ import com.course.mindmap.model.LayoutMode;
 import com.course.mindmap.model.MindMapDocument;
 import com.course.mindmap.model.MindMapNode;
 import java.awt.BorderLayout;
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.Point;
@@ -31,8 +33,10 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
+import javax.swing.JColorChooser;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
@@ -56,6 +60,12 @@ import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
 public class MainFrame extends JFrame {
+    private static final Color DEFAULT_TEXT_COLOR = new Color(33, 43, 54);
+    private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
+    private static final Color ROOT_LINE_COLOR = new Color(56, 116, 203);
+    private static final Color NODE_FILL_COLOR = Color.WHITE;
+    private static final Color NODE_LINE_COLOR = new Color(114, 132, 158);
+
     private final MindMapFileManager fileManager = new MindMapFileManager();
     private final MindMapCanvas canvas = new MindMapCanvas();
     private final JTree outlineTree = new JTree();
@@ -67,9 +77,9 @@ public class MainFrame extends JFrame {
     private final JButton deleteNodeButton = new JButton("删除节点");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
-    private final JMenuItem canvasAddChildMenuItem = createMenuItem("\u6dfb\u52a0\u5b50\u8282\u70b9", null, this::addChildNode);
-    private final JMenuItem canvasAddSiblingMenuItem = createMenuItem("\u6dfb\u52a0\u5144\u5f1f\u8282\u70b9", null, this::addSiblingNode);
-    private final JMenuItem canvasDeleteNodeMenuItem = createMenuItem("\u5220\u9664\u8282\u70b9", null, this::deleteSelectedNode);
+    private final JMenuItem canvasAddChildMenuItem = createMenuItem("添加子节点", null, this::addChildNode);
+    private final JMenuItem canvasAddSiblingMenuItem = createMenuItem("添加兄弟节点", null, this::addSiblingNode);
+    private final JMenuItem canvasDeleteNodeMenuItem = createMenuItem("删除节点", null, this::deleteSelectedNode);
     private final JPopupMenu canvasNodeMenu = createCanvasNodeMenu();
 
     private MindMapDocument document;
@@ -112,6 +122,11 @@ public class MainFrame extends JFrame {
         editMenu.add(createMenuItem("添加兄弟节点", KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.SHIFT_DOWN_MASK), this::addSiblingNode));
         editMenu.add(createMenuItem("重命名节点", KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), this::renameSelectedNode));
         editMenu.add(createMenuItem("删除节点", KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), this::deleteSelectedNode));
+        editMenu.addSeparator();
+        editMenu.add(createMenuItem("设置文字颜色", null, this::chooseSelectedNodeTextColor));
+        editMenu.add(createMenuItem("设置填充颜色", null, this::chooseSelectedNodeFillColor));
+        editMenu.add(createMenuItem("设置线条颜色", null, this::chooseSelectedNodeLineColor));
+        editMenu.add(createMenuItem("恢复默认样式", null, this::resetSelectedNodeStyle));
 
         JMenu helpMenu = new JMenu("帮助");
         helpMenu.add(createMenuItem("使用说明", null, this::showHelp));
@@ -150,7 +165,7 @@ public class MainFrame extends JFrame {
         renameNodeButton.addActionListener(event -> renameSelectedNode());
         toolBar.add(renameNodeButton);
 
-        deleteNodeButton.setToolTipText("删除当前选中节点及其子节点");
+        deleteNodeButton.setToolTipText("删除当前选中节点及其所有子节点");
         deleteNodeButton.addActionListener(event -> deleteSelectedNode());
         toolBar.add(deleteNodeButton);
 
@@ -226,6 +241,11 @@ public class MainFrame extends JFrame {
         popupMenu.add(canvasAddSiblingMenuItem);
         popupMenu.addSeparator();
         popupMenu.add(canvasDeleteNodeMenuItem);
+        popupMenu.addSeparator();
+        popupMenu.add(createMenuItem("设置文字颜色", null, this::chooseSelectedNodeTextColor));
+        popupMenu.add(createMenuItem("设置填充颜色", null, this::chooseSelectedNodeFillColor));
+        popupMenu.add(createMenuItem("设置线条颜色", null, this::chooseSelectedNodeLineColor));
+        popupMenu.add(createMenuItem("恢复默认样式", null, this::resetSelectedNodeStyle));
         return popupMenu;
     }
 
@@ -336,8 +356,7 @@ public class MainFrame extends JFrame {
     }
 
     private void addChildNode() {
-        if (selectedNode == null) {
-            showMessage("请先选中一个节点。");
+        if (!ensureNodeSelected()) {
             return;
         }
 
@@ -347,13 +366,11 @@ public class MainFrame extends JFrame {
         }
 
         MindMapNode child = selectedNode.addChild(text);
-        dirty = true;
-        refreshDocumentView(child);
+        markDocumentDirtyAndRefresh(child);
     }
 
     private void addSiblingNode() {
-        if (selectedNode == null) {
-            showMessage("请先选中一个节点。");
+        if (!ensureNodeSelected()) {
             return;
         }
         if (selectedNode.isRoot()) {
@@ -367,13 +384,11 @@ public class MainFrame extends JFrame {
         }
 
         MindMapNode sibling = selectedNode.addSiblingAfter(text);
-        dirty = true;
-        refreshDocumentView(sibling);
+        markDocumentDirtyAndRefresh(sibling);
     }
 
     private void renameSelectedNode() {
-        if (selectedNode == null) {
-            showMessage("请先选中一个节点。");
+        if (!ensureNodeSelected()) {
             return;
         }
 
@@ -386,13 +401,11 @@ public class MainFrame extends JFrame {
         if (selectedNode.isRoot()) {
             document.setTitle(text);
         }
-        dirty = true;
-        refreshDocumentView(selectedNode);
+        markDocumentDirtyAndRefresh(selectedNode);
     }
 
     private void deleteSelectedNode() {
-        if (selectedNode == null) {
-            showMessage("请先选中一个节点。");
+        if (!ensureNodeSelected()) {
             return;
         }
         if (selectedNode.isRoot()) {
@@ -413,8 +426,51 @@ public class MainFrame extends JFrame {
 
         MindMapNode parent = selectedNode.getParent();
         parent.removeChild(selectedNode);
-        dirty = true;
-        refreshDocumentView(parent);
+        markDocumentDirtyAndRefresh(parent);
+    }
+
+    private void chooseSelectedNodeTextColor() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        chooseSelectedNodeColor("选择文字颜色", selectedNode.getTextColorHex(), defaultTextColor(selectedNode), selectedNode::setTextColorHex);
+    }
+
+    private void chooseSelectedNodeFillColor() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        chooseSelectedNodeColor("选择填充颜色", selectedNode.getFillColorHex(), defaultFillColor(selectedNode), selectedNode::setFillColorHex);
+    }
+
+    private void chooseSelectedNodeLineColor() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        chooseSelectedNodeColor("选择线条颜色", selectedNode.getLineColorHex(), defaultLineColor(selectedNode), selectedNode::setLineColorHex);
+    }
+
+    private void resetSelectedNodeStyle() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        if (!selectedNode.hasCustomStyle()) {
+            return;
+        }
+
+        selectedNode.clearCustomStyle();
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void chooseSelectedNodeColor(String dialogTitle, String currentColorHex, Color fallbackColor, Consumer<String> setter) {
+        Color initialColor = parseColor(currentColorHex, fallbackColor);
+        Color selectedColor = JColorChooser.showDialog(this, dialogTitle, initialColor);
+        if (selectedColor == null) {
+            return;
+        }
+
+        setter.accept(toColorHex(selectedColor));
+        markDocumentDirtyAndRefresh(selectedNode);
     }
 
     private void showCanvasNodeMenu(Point point) {
@@ -619,7 +675,8 @@ public class MainFrame extends JFrame {
                 2. 单击节点可选中，双击节点可快速重命名。
                 3. 选中中心节点可以添加子节点和切换布局方式。
                 4. 选中普通节点可以添加子节点、兄弟节点，或删除该节点。
-                5. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
+                5. 右击节点或通过“编辑”菜单可以设置文字颜色、填充颜色、线条颜色。
+                6. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
                 """;
         JOptionPane.showMessageDialog(this, helpText, "使用说明", JOptionPane.INFORMATION_MESSAGE);
     }
@@ -629,5 +686,45 @@ public class MainFrame extends JFrame {
             return;
         }
         dispose();
+    }
+
+    private boolean ensureNodeSelected() {
+        if (selectedNode != null) {
+            return true;
+        }
+        showMessage("请先选中一个节点。");
+        return false;
+    }
+
+    private void markDocumentDirtyAndRefresh(MindMapNode preferredSelection) {
+        dirty = true;
+        refreshDocumentView(preferredSelection);
+    }
+
+    private Color defaultTextColor(MindMapNode node) {
+        return DEFAULT_TEXT_COLOR;
+    }
+
+    private Color defaultFillColor(MindMapNode node) {
+        return node != null && node.isRoot() ? ROOT_FILL_COLOR : NODE_FILL_COLOR;
+    }
+
+    private Color defaultLineColor(MindMapNode node) {
+        return node != null && node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR;
+    }
+
+    private Color parseColor(String colorHex, Color fallbackColor) {
+        if (colorHex == null || colorHex.isBlank()) {
+            return fallbackColor;
+        }
+        try {
+            return Color.decode(colorHex);
+        } catch (NumberFormatException exception) {
+            return fallbackColor;
+        }
+    }
+
+    private String toColorHex(Color color) {
+        return String.format(Locale.ROOT, "#%02X%02X%02X", color.getRed(), color.getGreen(), color.getBlue());
     }
 }
