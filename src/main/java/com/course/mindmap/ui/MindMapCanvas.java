@@ -1,6 +1,6 @@
 /*
 Script: MindMapCanvas.java
-Purpose: Render the mind map canvas and handle direct node interactions.
+Purpose: Render the mind map canvas and handle direct node interactions, including custom node styles.
 Author: chenyuchong
 Created: 2026-03-14
 Last Updated: 2026-04-27
@@ -10,6 +10,7 @@ Usage: Instantiated by MainFrame as the central drawing surface for the applicat
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
 - 2026-04-27 Codex: Added node right-click context menu callbacks for canvas actions. Original author: chenyuchong. Reason: enable add child, add sibling, and delete actions directly from the drawing area. Impact: backward compatible.
+- 2026-04-27 Codex: Added support for rendering custom node text, fill, and line colors. Original author: chenyuchong. Reason: allow per-node style customization while preserving selection feedback. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -47,6 +48,13 @@ public class MindMapCanvas extends JPanel {
     private static final int MIN_WIDTH = 110;
     private static final int MIN_HEIGHT = 38;
     private static final Font NODE_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 14);
+    private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
+    private static final Color ROOT_LINE_COLOR = new Color(56, 116, 203);
+    private static final Color NODE_FILL_COLOR = Color.WHITE;
+    private static final Color NODE_LINE_COLOR = new Color(114, 132, 158);
+    private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
+    private static final Color NODE_SHADOW_COLOR = new Color(0, 0, 0, 18);
+    private static final Color SELECTED_HALO_COLOR = new Color(235, 141, 0, 180);
 
     private final MindMapLayoutEngine layoutEngine = new MindMapLayoutEngine();
     private MindMapDocument document;
@@ -197,7 +205,6 @@ public class MindMapCanvas extends JPanel {
 
     private void drawConnections(Graphics2D graphics) {
         graphics.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        graphics.setColor(new Color(140, 160, 182));
 
         for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
             MindMapNode node = placement.node();
@@ -230,6 +237,7 @@ public class MindMapCanvas extends JPanel {
                     endX,
                     endY
             );
+            graphics.setColor(withAlpha(resolveLineColor(node), 190));
             graphics.draw(curve);
         }
     }
@@ -239,29 +247,32 @@ public class MindMapCanvas extends JPanel {
         for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
             MindMapNode node = placement.node();
             Rectangle bounds = placement.copyBounds();
-
-            graphics.setColor(new Color(0, 0, 0, 18));
-            graphics.fill(new RoundRectangle2D.Double(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 18, 18));
-
             boolean selected = selectedNode != null && selectedNode.getId().equals(node.getId());
-            Color fillColor;
-            Color borderColor;
-            if (node.isRoot()) {
-                fillColor = selected ? new Color(255, 241, 214) : new Color(227, 241, 255);
-                borderColor = selected ? new Color(235, 141, 0) : new Color(56, 116, 203);
-            } else {
-                fillColor = selected ? new Color(255, 248, 220) : Color.WHITE;
-                borderColor = selected ? new Color(235, 141, 0) : new Color(114, 132, 158);
-            }
 
             RoundRectangle2D shape = new RoundRectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
+            RoundRectangle2D shadowShape = new RoundRectangle2D.Double(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 18, 18);
+            RoundRectangle2D haloShape = new RoundRectangle2D.Double(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 22, 22);
+
+            Color fillColor = resolveFillColor(node);
+            Color lineColor = resolveLineColor(node);
+            Color textColor = resolveTextColor(node);
+
+            graphics.setColor(NODE_SHADOW_COLOR);
+            graphics.fill(shadowShape);
+
+            if (selected) {
+                graphics.setColor(SELECTED_HALO_COLOR);
+                graphics.setStroke(new BasicStroke(3.2f));
+                graphics.draw(haloShape);
+            }
+
             graphics.setColor(fillColor);
             graphics.fill(shape);
-            graphics.setColor(borderColor);
-            graphics.setStroke(new BasicStroke(selected ? 3.0f : 1.8f));
+            graphics.setColor(lineColor);
+            graphics.setStroke(new BasicStroke(selected ? 2.8f : 1.8f));
             graphics.draw(shape);
 
-            graphics.setColor(new Color(33, 43, 54));
+            graphics.setColor(textColor);
             int textWidth = metrics.stringWidth(node.getText());
             int textX = bounds.x + (bounds.width - textWidth) / 2;
             int textY = bounds.y + (bounds.height - metrics.getHeight()) / 2 + metrics.getAscent();
@@ -307,5 +318,34 @@ public class MindMapCanvas extends JPanel {
         int width = Math.max(MIN_WIDTH, metrics.stringWidth(node.getText()) + 30);
         int height = Math.max(MIN_HEIGHT, metrics.getHeight() + 16);
         return new Dimension(width, height);
+    }
+
+    private Color resolveTextColor(MindMapNode node) {
+        return parseColor(node.getTextColorHex(), NODE_TEXT_COLOR);
+    }
+
+    private Color resolveFillColor(MindMapNode node) {
+        Color fallback = node.isRoot() ? ROOT_FILL_COLOR : NODE_FILL_COLOR;
+        return parseColor(node.getFillColorHex(), fallback);
+    }
+
+    private Color resolveLineColor(MindMapNode node) {
+        Color fallback = node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR;
+        return parseColor(node.getLineColorHex(), fallback);
+    }
+
+    private Color parseColor(String colorHex, Color fallbackColor) {
+        if (colorHex == null || colorHex.isBlank()) {
+            return fallbackColor;
+        }
+        try {
+            return Color.decode(colorHex);
+        } catch (NumberFormatException exception) {
+            return fallbackColor;
+        }
+    }
+
+    private Color withAlpha(Color color, int alpha) {
+        return new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
     }
 }
