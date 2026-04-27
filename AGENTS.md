@@ -5,6 +5,7 @@
 
 ## Collaborators
 
+- Codex
 - chenzongbo
 - 陈宇冲
 - 陈宗波
