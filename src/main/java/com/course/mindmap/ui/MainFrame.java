@@ -1,3 +1,16 @@
+/*
+Script: MainFrame.java
+Purpose: Build the main application window and coordinate mind map editing actions.
+Author: chenyuchong
+Created: 2026-03-14
+Last Updated: 2026-04-27
+Dependencies: Java Swing, AWT, java.io.File, com.course.mindmap.io, com.course.mindmap.model
+Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interactions, and file operations.
+
+Changelog:
+- 2026-03-14 chenyuchong: Initial creation.
+- 2026-04-27 Codex: Added canvas node context menu actions and synchronized them with existing edit commands. Original author: chenyuchong. Reason: allow right-click editing directly on nodes in the drawing area. Impact: backward compatible.
+*/
 package com.course.mindmap.ui;
 
 import com.course.mindmap.io.MindMapFileManager;
@@ -7,6 +20,7 @@ import com.course.mindmap.model.MindMapNode;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
@@ -28,6 +42,7 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
 import javax.swing.JSplitPane;
 import javax.swing.JToolBar;
@@ -52,6 +67,10 @@ public class MainFrame extends JFrame {
     private final JButton deleteNodeButton = new JButton("删除节点");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
+    private final JMenuItem canvasAddChildMenuItem = createMenuItem("\u6dfb\u52a0\u5b50\u8282\u70b9", null, this::addChildNode);
+    private final JMenuItem canvasAddSiblingMenuItem = createMenuItem("\u6dfb\u52a0\u5144\u5f1f\u8282\u70b9", null, this::addSiblingNode);
+    private final JMenuItem canvasDeleteNodeMenuItem = createMenuItem("\u5220\u9664\u8282\u70b9", null, this::deleteSelectedNode);
+    private final JPopupMenu canvasNodeMenu = createCanvasNodeMenu();
 
     private MindMapDocument document;
     private MindMapNode selectedNode;
@@ -174,6 +193,7 @@ public class MainFrame extends JFrame {
     private void wireEvents() {
         canvas.setSelectionListener(this::setSelectedNode);
         canvas.setNodeActivationListener(node -> renameSelectedNode());
+        canvas.setNodeContextMenuListener((node, point) -> showCanvasNodeMenu(point));
 
         outlineTree.addTreeSelectionListener(event -> {
             if (syncingSelection) {
@@ -198,6 +218,15 @@ public class MainFrame extends JFrame {
                 closeWindow();
             }
         });
+    }
+
+    private JPopupMenu createCanvasNodeMenu() {
+        JPopupMenu popupMenu = new JPopupMenu();
+        popupMenu.add(canvasAddChildMenuItem);
+        popupMenu.add(canvasAddSiblingMenuItem);
+        popupMenu.addSeparator();
+        popupMenu.add(canvasDeleteNodeMenuItem);
+        return popupMenu;
     }
 
     private JButton createToolbarButton(String text, String toolTip, Runnable action) {
@@ -386,6 +415,18 @@ public class MainFrame extends JFrame {
         parent.removeChild(selectedNode);
         dirty = true;
         refreshDocumentView(parent);
+    }
+
+    private void showCanvasNodeMenu(Point point) {
+        if (selectedNode == null) {
+            return;
+        }
+
+        boolean rootSelected = selectedNode.isRoot();
+        canvasAddChildMenuItem.setEnabled(true);
+        canvasAddSiblingMenuItem.setEnabled(!rootSelected);
+        canvasDeleteNodeMenuItem.setEnabled(!rootSelected);
+        canvasNodeMenu.show(canvas, point.x, point.y);
     }
 
     private void applyLayoutMode(LayoutMode layoutMode) {

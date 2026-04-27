@@ -1,3 +1,16 @@
+/*
+Script: MindMapCanvas.java
+Purpose: Render the mind map canvas and handle direct node interactions.
+Author: chenyuchong
+Created: 2026-03-14
+Last Updated: 2026-04-27
+Dependencies: Java Swing, AWT, com.course.mindmap.layout, com.course.mindmap.model
+Usage: Instantiated by MainFrame as the central drawing surface for the application.
+
+Changelog:
+- 2026-03-14 chenyuchong: Initial creation.
+- 2026-04-27 Codex: Added node right-click context menu callbacks for canvas actions. Original author: chenyuchong. Reason: enable add child, add sibling, and delete actions directly from the drawing area. Impact: backward compatible.
+*/
 package com.course.mindmap.ui;
 
 import com.course.mindmap.layout.LayoutSnapshot;
@@ -23,9 +36,11 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
 
 public class MindMapCanvas extends JPanel {
     private static final int CANVAS_MARGIN = 80;
@@ -41,6 +56,8 @@ public class MindMapCanvas extends JPanel {
     };
     private Consumer<MindMapNode> nodeActivationListener = node -> {
     };
+    private BiConsumer<MindMapNode, Point> nodeContextMenuListener = (node, point) -> {
+    };
     private int offsetX = CANVAS_MARGIN;
     private int offsetY = CANVAS_MARGIN;
 
@@ -52,12 +69,25 @@ public class MindMapCanvas extends JPanel {
         MouseAdapter mouseAdapter = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
+                if (!SwingUtilities.isLeftMouseButton(event)) {
+                    return;
+                }
                 MindMapNode clickedNode = findNodeAt(event.getPoint());
                 setSelectedNode(clickedNode, false);
                 selectionListener.accept(clickedNode);
                 if (clickedNode != null && event.getClickCount() == 2) {
                     nodeActivationListener.accept(clickedNode);
                 }
+            }
+
+            @Override
+            public void mousePressed(MouseEvent event) {
+                maybeShowNodeContextMenu(event);
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent event) {
+                maybeShowNodeContextMenu(event);
             }
         };
         addMouseListener(mouseAdapter);
@@ -71,6 +101,11 @@ public class MindMapCanvas extends JPanel {
     public void setNodeActivationListener(Consumer<MindMapNode> nodeActivationListener) {
         this.nodeActivationListener = nodeActivationListener == null ? node -> {
         } : nodeActivationListener;
+    }
+
+    public void setNodeContextMenuListener(BiConsumer<MindMapNode, Point> nodeContextMenuListener) {
+        this.nodeContextMenuListener = nodeContextMenuListener == null ? (node, point) -> {
+        } : nodeContextMenuListener;
     }
 
     public void setDocument(MindMapDocument document) {
@@ -242,6 +277,21 @@ public class MindMapCanvas extends JPanel {
             }
         }
         return null;
+    }
+
+    private void maybeShowNodeContextMenu(MouseEvent event) {
+        if (!event.isPopupTrigger()) {
+            return;
+        }
+
+        MindMapNode clickedNode = findNodeAt(event.getPoint());
+        if (clickedNode == null) {
+            return;
+        }
+
+        setSelectedNode(clickedNode, false);
+        selectionListener.accept(clickedNode);
+        nodeContextMenuListener.accept(clickedNode, event.getPoint());
     }
 
     private Rectangle toViewBounds(Rectangle nodeBounds) {
