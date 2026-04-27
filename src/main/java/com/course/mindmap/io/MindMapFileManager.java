@@ -1,3 +1,16 @@
+/*
+Script: MindMapFileManager.java
+Purpose: Save and load mind map documents, including per-node visual style settings.
+Author: chenyuchong
+Created: 2026-03-14
+Last Updated: 2026-04-27
+Dependencies: Java XML APIs, com.course.mindmap.model
+Usage: Called by MainFrame when persisting or opening .dt mind map files.
+
+Changelog:
+- 2026-03-14 chenyuchong: Initial creation.
+- 2026-04-27 Codex: Added persistence for node text, fill, and line colors. Original author: chenyuchong. Reason: preserve user-selected node styles across save and load operations. Impact: backward compatible.
+*/
 package com.course.mindmap.io;
 
 import com.course.mindmap.model.LayoutMode;
@@ -18,7 +31,7 @@ import org.w3c.dom.NodeList;
 
 public class MindMapFileManager {
     public void save(MindMapDocument document, File file) throws Exception {
-        javax.xml.parsers.DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
         DocumentBuilder builder = factory.newDocumentBuilder();
         org.w3c.dom.Document xmlDocument = builder.newDocument();
 
@@ -61,6 +74,10 @@ public class MindMapFileManager {
         Element element = xmlDocument.createElement("node");
         element.setAttribute("id", node.getId());
         element.setAttribute("text", node.getText());
+        writeOptionalAttribute(element, "text-color", node.getTextColorHex());
+        writeOptionalAttribute(element, "fill-color", node.getFillColorHex());
+        writeOptionalAttribute(element, "line-color", node.getLineColorHex());
+
         for (MindMapNode child : node.getChildren()) {
             element.appendChild(writeNode(xmlDocument, child));
         }
@@ -69,6 +86,10 @@ public class MindMapFileManager {
 
     private MindMapNode readNode(Element element) {
         MindMapNode node = new MindMapNode(element.getAttribute("id"), element.getAttribute("text"));
+        node.setTextColorHex(readOptionalAttribute(element, "text-color"));
+        node.setFillColorHex(readOptionalAttribute(element, "fill-color"));
+        node.setLineColorHex(readOptionalAttribute(element, "line-color"));
+
         NodeList childNodes = element.getChildNodes();
         for (int i = 0; i < childNodes.getLength(); i++) {
             Node childNode = childNodes.item(i);
@@ -88,5 +109,16 @@ public class MindMapFileManager {
             }
         }
         return null;
+    }
+
+    private void writeOptionalAttribute(Element element, String name, String value) {
+        if (value != null && !value.isBlank()) {
+            element.setAttribute(name, value);
+        }
+    }
+
+    private String readOptionalAttribute(Element element, String name) {
+        String value = element.getAttribute(name);
+        return value == null || value.isBlank() ? null : value;
     }
 }
