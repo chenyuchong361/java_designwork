@@ -6,6 +6,9 @@
 ## Collaborators
 
 - chenzongbo
+- 陈宇冲
+- 陈宗波
+- 温文辉
 
 ---
 
