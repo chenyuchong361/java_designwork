@@ -15,6 +15,7 @@ Changelog:
 - 2026-04-28 Codex: Replaced the simple fill menu with a right-click node property panel for fill, border, text, and branch styles. Original author: chenyuchong. Reason: align the interaction model with mainstream mind map tools. Impact: backward compatible.
 - 2026-04-28 Codex: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
 - 2026-04-28 Codex: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
+- 2026-04-28 Codex: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -83,6 +84,13 @@ import javax.swing.tree.TreePath;
 import javax.swing.tree.TreeSelectionModel;
 
 public class MainFrame extends JFrame {
+    private enum ColorTarget {
+        FILL,
+        BORDER,
+        TEXT,
+        BRANCH
+    }
+
     private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
     private static final Color ROOT_BORDER_COLOR = new Color(56, 116, 203);
     private static final Color NODE_FILL_COLOR = Color.WHITE;
@@ -122,6 +130,9 @@ public class MainFrame extends JFrame {
     private boolean dirty;
     private boolean syncingSelection;
     private boolean syncingLayoutBox;
+    private JPopupMenu nodePropertyPopup;
+    private Point nodePropertyPopupPoint;
+    private ColorTarget activeColorTarget;
 
     public MainFrame() {
         super("思维导图绘制工具");
@@ -446,7 +457,9 @@ public class MainFrame extends JFrame {
 
     private void applySelectedNodeFillColor(Color selectedColor) {
         selectedNode.setFillColorHex(toColorHex(selectedColor));
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void setSelectedNodeNoFill() {
@@ -458,7 +471,9 @@ public class MainFrame extends JFrame {
         }
 
         selectedNode.setFillTransparent(true);
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void resetSelectedNodeFill() {
@@ -470,12 +485,16 @@ public class MainFrame extends JFrame {
         }
 
         selectedNode.clearCustomFillStyle();
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void applySelectedNodeBorderColor(Color selectedColor) {
         selectedNode.setBorderColorHex(toColorHex(selectedColor));
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void resetSelectedNodeBorder() {
@@ -487,12 +506,16 @@ public class MainFrame extends JFrame {
         }
 
         selectedNode.clearCustomBorderStyle();
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void applySelectedNodeTextColor(Color selectedColor) {
         selectedNode.setTextColorHex(toColorHex(selectedColor));
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void resetSelectedNodeTextStyle() {
@@ -504,7 +527,9 @@ public class MainFrame extends JFrame {
         }
 
         selectedNode.clearCustomTextStyle();
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void updateSelectedNodeFontSize(int fontSize) {
@@ -517,6 +542,7 @@ public class MainFrame extends JFrame {
 
         selectedNode.setFontSize(fontSize);
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void updateSelectedNodeBold(boolean bold) {
@@ -529,11 +555,14 @@ public class MainFrame extends JFrame {
 
         selectedNode.setBold(bold);
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void applySelectedNodeBranchColor(Color selectedColor) {
         selectedNode.setBranchColorHex(toColorHex(selectedColor));
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void resetSelectedNodeBranchColor() {
@@ -545,18 +574,33 @@ public class MainFrame extends JFrame {
         }
 
         selectedNode.clearCustomBranchStyle();
+        activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
+        reopenNodePropertyPopup();
     }
 
     private void showCanvasNodePropertyPopup(Point point) {
         if (selectedNode == null) {
             return;
         }
+        nodePropertyPopupPoint = new Point(point.x + 8, point.y + 2);
+        activeColorTarget = null;
+        reopenNodePropertyPopup();
+    }
 
-        JPopupMenu popupMenu = new JPopupMenu();
-        popupMenu.setBorder(BorderFactory.createLineBorder(new Color(214, 214, 214)));
-        popupMenu.add(buildNodePropertyPanel(popupMenu));
-        popupMenu.show(canvas, point.x + 8, point.y + 2);
+    private void reopenNodePropertyPopup() {
+        if (selectedNode == null || nodePropertyPopupPoint == null) {
+            return;
+        }
+
+        if (nodePropertyPopup != null) {
+            nodePropertyPopup.setVisible(false);
+        }
+
+        nodePropertyPopup = new JPopupMenu();
+        nodePropertyPopup.setBorder(BorderFactory.createLineBorder(new Color(214, 214, 214)));
+        nodePropertyPopup.add(buildNodePropertyPanel(nodePropertyPopup));
+        nodePropertyPopup.show(canvas, nodePropertyPopupPoint.x, nodePropertyPopupPoint.y);
     }
 
     private JPanel buildNodePropertyPanel(JPopupMenu popupMenu) {
@@ -601,10 +645,13 @@ public class MainFrame extends JFrame {
         JPanel section = createSectionPanel();
         section.add(createSectionTitle("填充"));
         JPanel row = createPropertyRow("背景");
-        row.add(createColorSwatchButton(resolveFillPreviewColor(selectedNode), "选择填充颜色", this::applySelectedNodeFillColor));
+        row.add(createColorSwatchButton(resolveFillPreviewColor(selectedNode), "选择填充颜色", ColorTarget.FILL));
         row.add(createSmallButton("无填充", this::setSelectedNodeNoFill));
         row.add(createSmallButton("默认", this::resetSelectedNodeFill));
         section.add(row);
+        if (activeColorTarget == ColorTarget.FILL) {
+            section.add(createInlinePalettePanel("选择填充颜色", resolveFillPreviewColor(selectedNode), ColorTarget.FILL));
+        }
         return section;
     }
 
@@ -612,9 +659,12 @@ public class MainFrame extends JFrame {
         JPanel section = createSectionPanel();
         section.add(createSectionTitle("边框"));
         JPanel row = createPropertyRow("颜色");
-        row.add(createColorSwatchButton(resolveBorderPreviewColor(selectedNode), "选择边框颜色", this::applySelectedNodeBorderColor));
+        row.add(createColorSwatchButton(resolveBorderPreviewColor(selectedNode), "选择边框颜色", ColorTarget.BORDER));
         row.add(createSmallButton("自动", this::resetSelectedNodeBorder));
         section.add(row);
+        if (activeColorTarget == ColorTarget.BORDER) {
+            section.add(createInlinePalettePanel("选择边框颜色", resolveBorderPreviewColor(selectedNode), ColorTarget.BORDER));
+        }
         return section;
     }
 
@@ -635,9 +685,12 @@ public class MainFrame extends JFrame {
         section.add(sizeRow);
 
         JPanel colorRow = createPropertyRow("颜色");
-        colorRow.add(createColorSwatchButton(resolveTextPreviewColor(selectedNode), "选择文字颜色", this::applySelectedNodeTextColor));
+        colorRow.add(createColorSwatchButton(resolveTextPreviewColor(selectedNode), "选择文字颜色", ColorTarget.TEXT));
         colorRow.add(createSmallButton("默认", this::resetSelectedNodeTextStyle));
         section.add(colorRow);
+        if (activeColorTarget == ColorTarget.TEXT) {
+            section.add(createInlinePalettePanel("选择文字颜色", resolveTextPreviewColor(selectedNode), ColorTarget.TEXT));
+        }
         return section;
     }
 
@@ -655,9 +708,12 @@ public class MainFrame extends JFrame {
         }
 
         JPanel row = createPropertyRow("颜色");
-        row.add(createColorSwatchButton(resolveBranchPreviewColor(selectedNode), "选择分支颜色", this::applySelectedNodeBranchColor));
+        row.add(createColorSwatchButton(resolveBranchPreviewColor(selectedNode), "选择分支颜色", ColorTarget.BRANCH));
         row.add(createSmallButton("自动", this::resetSelectedNodeBranchColor));
         section.add(row);
+        if (activeColorTarget == ColorTarget.BRANCH) {
+            section.add(createInlinePalettePanel("选择分支颜色", resolveBranchPreviewColor(selectedNode), ColorTarget.BRANCH));
+        }
         return section;
     }
 
@@ -706,7 +762,7 @@ public class MainFrame extends JFrame {
         return button;
     }
 
-    private JButton createColorSwatchButton(Color color, String title, Consumer<Color> onChoose) {
+    private JButton createColorSwatchButton(Color color, String title, ColorTarget target) {
         JButton button = new JButton(new ImageIcon(createColorSwatchImage(color, COLOR_BUTTON_SIZE.width, COLOR_BUTTON_SIZE.height)));
         button.setPreferredSize(COLOR_BUTTON_SIZE);
         button.setMinimumSize(COLOR_BUTTON_SIZE);
@@ -717,7 +773,10 @@ public class MainFrame extends JFrame {
         button.setBorder(BorderFactory.createEmptyBorder());
         button.setOpaque(false);
         button.setToolTipText(title);
-        button.addActionListener(event -> showColorPalettePopup(button, title, color, onChoose));
+        button.addActionListener(event -> {
+            activeColorTarget = activeColorTarget == target ? null : target;
+            reopenNodePropertyPopup();
+        });
         return button;
     }
 
@@ -727,19 +786,20 @@ public class MainFrame extends JFrame {
         return button;
     }
 
-    private void showColorPalettePopup(Component anchor, String title, Color initialColor, Consumer<Color> onChoose) {
-        JPopupMenu palettePopup = new JPopupMenu();
-        palettePopup.setBorder(BorderFactory.createLineBorder(new Color(218, 218, 218)));
-
+    private JPanel createInlinePalettePanel(String title, Color initialColor, ColorTarget target) {
         JPanel content = new JPanel();
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setBackground(Color.WHITE);
-        content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        content.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(218, 218, 218)),
+                BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+        content.setAlignmentX(Component.LEFT_ALIGNMENT);
 
         JPanel grid = new JPanel(new GridLayout(5, 8, 4, 4));
         grid.setOpaque(false);
         for (Color paletteColor : PALETTE_COLORS) {
-            grid.add(createPaletteColorTile(paletteColor, palettePopup, anchor, onChoose));
+            grid.add(createPaletteColorTile(paletteColor, target));
         }
         content.add(grid);
         content.add(Box.createVerticalStrut(10));
@@ -761,20 +821,15 @@ public class MainFrame extends JFrame {
             if (selectedColor == null) {
                 return;
             }
-            onChoose.accept(selectedColor);
-            SwingUtilities.invokeLater(() -> {
-                palettePopup.setVisible(false);
-                closeParentPropertyPopup(anchor);
-            });
+            applyColorSelection(target, selectedColor);
         });
         footer.add(moreButton);
 
         content.add(footer);
-        palettePopup.add(content);
-        palettePopup.show(anchor, 0, anchor.getHeight() + 4);
+        return content;
     }
 
-    private JPanel createPaletteColorTile(Color color, JPopupMenu palettePopup, Component anchor, Consumer<Color> onChoose) {
+    private JPanel createPaletteColorTile(Color color, ColorTarget target) {
         JPanel tile = new JPanel();
         tile.setPreferredSize(PALETTE_TILE_SIZE);
         tile.setBackground(color);
@@ -783,11 +838,7 @@ public class MainFrame extends JFrame {
         tile.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent event) {
-                onChoose.accept(color);
-                SwingUtilities.invokeLater(() -> {
-                    palettePopup.setVisible(false);
-                    closeParentPropertyPopup(anchor);
-                });
+                applyColorSelection(target, color);
             }
 
             @Override
@@ -829,10 +880,15 @@ public class MainFrame extends JFrame {
         return image;
     }
 
-    private void closeParentPropertyPopup(Component anchor) {
-        JPopupMenu parentPopup = (JPopupMenu) SwingUtilities.getAncestorOfClass(JPopupMenu.class, anchor);
-        if (parentPopup != null) {
-            parentPopup.setVisible(false);
+    private void applyColorSelection(ColorTarget target, Color color) {
+        if (target == null) {
+            return;
+        }
+        switch (target) {
+            case FILL -> applySelectedNodeFillColor(color);
+            case BORDER -> applySelectedNodeBorderColor(color);
+            case TEXT -> applySelectedNodeTextColor(color);
+            case BRANCH -> applySelectedNodeBranchColor(color);
         }
     }
 
