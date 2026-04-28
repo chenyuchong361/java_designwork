@@ -1,6 +1,6 @@
 /*
 Script: MainFrame.java
-Purpose: Build the main application window and coordinate mind map editing, file actions, and fill styling.
+Purpose: Build the main application window and coordinate mind map editing, file actions, and node property editing.
 Author: chenyuchong
 Created: 2026-03-14
 Last Updated: 2026-04-28
@@ -12,6 +12,7 @@ Changelog:
 - 2026-04-27 Codex: Added canvas node context menu actions and synchronized them with existing edit commands. Original author: chenyuchong. Reason: allow right-click editing directly on nodes in the drawing area. Impact: backward compatible.
 - 2026-04-27 Codex: Added per-node text, fill, and line color editing actions with style persistence support. Original author: chenyuchong. Reason: allow users to customize module appearance directly in the application. Impact: backward compatible.
 - 2026-04-28 Codex: Simplified styling controls to fill-only actions with a no-fill option. Original author: chenyuchong. Reason: match the requested module appearance workflow while keeping default borders. Impact: backward compatible.
+- 2026-04-28 Codex: Replaced the simple fill menu with a right-click node property panel for fill, border, text, and branch styles. Original author: chenyuchong. Reason: align the interaction model with mainstream mind map tools. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -21,7 +22,9 @@ import com.course.mindmap.model.MindMapDocument;
 import com.course.mindmap.model.MindMapNode;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Point;
 import java.awt.event.InputEvent;
@@ -34,9 +37,11 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.function.Consumer;
 import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
+import javax.swing.JCheckBox;
 import javax.swing.JColorChooser;
 import javax.swing.JComboBox;
 import javax.swing.JFileChooser;
@@ -49,10 +54,14 @@ import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
 import javax.swing.JScrollPane;
+import javax.swing.JSeparator;
+import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JToolBar;
 import javax.swing.JTree;
 import javax.swing.KeyStroke;
+import javax.swing.SpinnerNumberModel;
+import javax.swing.SwingConstants;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -62,7 +71,12 @@ import javax.swing.tree.TreeSelectionModel;
 
 public class MainFrame extends JFrame {
     private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
+    private static final Color ROOT_BORDER_COLOR = new Color(56, 116, 203);
     private static final Color NODE_FILL_COLOR = Color.WHITE;
+    private static final Color NODE_BORDER_COLOR = new Color(114, 132, 158);
+    private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
+    private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
+    private static final Dimension COLOR_BUTTON_SIZE = new Dimension(34, 22);
 
     private final MindMapFileManager fileManager = new MindMapFileManager();
     private final MindMapCanvas canvas = new MindMapCanvas();
@@ -75,10 +89,6 @@ public class MainFrame extends JFrame {
     private final JButton deleteNodeButton = new JButton("删除节点");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
-    private final JMenuItem canvasAddChildMenuItem = createMenuItem("添加子节点", null, this::addChildNode);
-    private final JMenuItem canvasAddSiblingMenuItem = createMenuItem("添加兄弟节点", null, this::addSiblingNode);
-    private final JMenuItem canvasDeleteNodeMenuItem = createMenuItem("删除节点", null, this::deleteSelectedNode);
-    private final JPopupMenu canvasNodeMenu = createCanvasNodeMenu();
 
     private MindMapDocument document;
     private MindMapNode selectedNode;
@@ -120,10 +130,6 @@ public class MainFrame extends JFrame {
         editMenu.add(createMenuItem("添加兄弟节点", KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.SHIFT_DOWN_MASK), this::addSiblingNode));
         editMenu.add(createMenuItem("重命名节点", KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), this::renameSelectedNode));
         editMenu.add(createMenuItem("删除节点", KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), this::deleteSelectedNode));
-        editMenu.addSeparator();
-        editMenu.add(createMenuItem("设置填充颜色", null, this::chooseSelectedNodeFillColor));
-        editMenu.add(createMenuItem("取消填充（仅边框）", null, this::setSelectedNodeNoFill));
-        editMenu.add(createMenuItem("恢复默认填充", null, this::resetSelectedNodeFill));
 
         JMenu helpMenu = new JMenu("帮助");
         helpMenu.add(createMenuItem("使用说明", null, this::showHelp));
@@ -205,7 +211,7 @@ public class MainFrame extends JFrame {
     private void wireEvents() {
         canvas.setSelectionListener(this::setSelectedNode);
         canvas.setNodeActivationListener(node -> renameSelectedNode());
-        canvas.setNodeContextMenuListener((node, point) -> showCanvasNodeMenu(point));
+        canvas.setNodeContextMenuListener((node, point) -> showCanvasNodePropertyPopup(point));
 
         outlineTree.addTreeSelectionListener(event -> {
             if (syncingSelection) {
@@ -230,19 +236,6 @@ public class MainFrame extends JFrame {
                 closeWindow();
             }
         });
-    }
-
-    private JPopupMenu createCanvasNodeMenu() {
-        JPopupMenu popupMenu = new JPopupMenu();
-        popupMenu.add(canvasAddChildMenuItem);
-        popupMenu.add(canvasAddSiblingMenuItem);
-        popupMenu.addSeparator();
-        popupMenu.add(canvasDeleteNodeMenuItem);
-        popupMenu.addSeparator();
-        popupMenu.add(createMenuItem("设置填充颜色", null, this::chooseSelectedNodeFillColor));
-        popupMenu.add(createMenuItem("取消填充（仅边框）", null, this::setSelectedNodeNoFill));
-        popupMenu.add(createMenuItem("恢复默认填充", null, this::resetSelectedNodeFill));
-        return popupMenu;
     }
 
     private JButton createToolbarButton(String text, String toolTip, Runnable action) {
@@ -430,7 +423,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
-        Color initialColor = parseColor(selectedNode.getFillColorHex(), defaultFillColor(selectedNode));
+        Color initialColor = resolveFillPreviewColor(selectedNode);
         Color selectedColor = JColorChooser.showDialog(this, "选择填充颜色", initialColor);
         if (selectedColor == null) {
             return;
@@ -464,16 +457,283 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(selectedNode);
     }
 
-    private void showCanvasNodeMenu(Point point) {
+    private void chooseSelectedNodeBorderColor() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+
+        Color initialColor = resolveBorderPreviewColor(selectedNode);
+        Color selectedColor = JColorChooser.showDialog(this, "选择边框颜色", initialColor);
+        if (selectedColor == null) {
+            return;
+        }
+
+        selectedNode.setBorderColorHex(toColorHex(selectedColor));
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void resetSelectedNodeBorder() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        if (!selectedNode.hasCustomBorderStyle()) {
+            return;
+        }
+
+        selectedNode.clearCustomBorderStyle();
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void chooseSelectedNodeTextColor() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+
+        Color initialColor = resolveTextPreviewColor(selectedNode);
+        Color selectedColor = JColorChooser.showDialog(this, "选择文字颜色", initialColor);
+        if (selectedColor == null) {
+            return;
+        }
+
+        selectedNode.setTextColorHex(toColorHex(selectedColor));
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void resetSelectedNodeTextStyle() {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        if (!selectedNode.hasCustomTextStyle()) {
+            return;
+        }
+
+        selectedNode.clearCustomTextStyle();
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void updateSelectedNodeFontSize(int fontSize) {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        if (selectedNode.getFontSize() == fontSize) {
+            return;
+        }
+
+        selectedNode.setFontSize(fontSize);
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void updateSelectedNodeBold(boolean bold) {
+        if (!ensureNodeSelected()) {
+            return;
+        }
+        if (selectedNode.isBold() == bold) {
+            return;
+        }
+
+        selectedNode.setBold(bold);
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void chooseSelectedNodeBranchColor() {
+        if (!ensureNodeSelected() || selectedNode.isRoot()) {
+            return;
+        }
+
+        Color initialColor = resolveBranchPreviewColor(selectedNode);
+        Color selectedColor = JColorChooser.showDialog(this, "选择分支颜色", initialColor);
+        if (selectedColor == null) {
+            return;
+        }
+
+        selectedNode.setBranchColorHex(toColorHex(selectedColor));
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void resetSelectedNodeBranchColor() {
+        if (!ensureNodeSelected() || selectedNode.isRoot()) {
+            return;
+        }
+        if (!selectedNode.hasCustomBranchStyle()) {
+            return;
+        }
+
+        selectedNode.clearCustomBranchStyle();
+        markDocumentDirtyAndRefresh(selectedNode);
+    }
+
+    private void showCanvasNodePropertyPopup(Point point) {
         if (selectedNode == null) {
             return;
         }
 
-        boolean rootSelected = selectedNode.isRoot();
-        canvasAddChildMenuItem.setEnabled(true);
-        canvasAddSiblingMenuItem.setEnabled(!rootSelected);
-        canvasDeleteNodeMenuItem.setEnabled(!rootSelected);
-        canvasNodeMenu.show(canvas, point.x, point.y);
+        JPopupMenu popupMenu = new JPopupMenu();
+        popupMenu.setBorder(BorderFactory.createLineBorder(new Color(214, 214, 214)));
+        popupMenu.add(buildNodePropertyPanel(popupMenu));
+        popupMenu.show(canvas, point.x + 8, point.y + 2);
+    }
+
+    private JPanel buildNodePropertyPanel(JPopupMenu popupMenu) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setBackground(Color.WHITE);
+        panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
+        panel.setPreferredSize(new Dimension(300, 0));
+
+        JLabel title = new JLabel("节点属性");
+        title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
+        title.setAlignmentX(Component.LEFT_ALIGNMENT);
+        panel.add(title);
+        panel.add(Box.createVerticalStrut(10));
+        panel.add(buildActionSection(popupMenu));
+        panel.add(createSectionSeparator());
+        panel.add(buildFillSection());
+        panel.add(createSectionSeparator());
+        panel.add(buildBorderSection());
+        panel.add(createSectionSeparator());
+        panel.add(buildTextSection());
+        panel.add(createSectionSeparator());
+        panel.add(buildBranchSection());
+        return panel;
+    }
+
+    private JPanel buildActionSection(JPopupMenu popupMenu) {
+        JPanel section = createSectionPanel();
+        section.add(createSectionTitle("操作"));
+
+        JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        buttons.setOpaque(false);
+        buttons.add(createPopupActionButton("添加子节点", true, popupMenu, this::addChildNode));
+        buttons.add(createPopupActionButton("添加兄弟节点", selectedNode != null && !selectedNode.isRoot(), popupMenu, this::addSiblingNode));
+        buttons.add(createPopupActionButton("删除节点", selectedNode != null && !selectedNode.isRoot(), popupMenu, this::deleteSelectedNode));
+        section.add(buttons);
+        return section;
+    }
+
+    private JPanel buildFillSection() {
+        JPanel section = createSectionPanel();
+        section.add(createSectionTitle("填充"));
+        JPanel row = createPropertyRow("背景");
+        row.add(createColorSwatchButton(resolveFillPreviewColor(selectedNode), "选择填充颜色", this::chooseSelectedNodeFillColor));
+        row.add(createSmallButton("仅边框", this::setSelectedNodeNoFill));
+        row.add(createSmallButton("默认", this::resetSelectedNodeFill));
+        section.add(row);
+        return section;
+    }
+
+    private JPanel buildBorderSection() {
+        JPanel section = createSectionPanel();
+        section.add(createSectionTitle("边框"));
+        JPanel row = createPropertyRow("颜色");
+        row.add(createColorSwatchButton(resolveBorderPreviewColor(selectedNode), "选择边框颜色", this::chooseSelectedNodeBorderColor));
+        row.add(createSmallButton("自动", this::resetSelectedNodeBorder));
+        section.add(row);
+        return section;
+    }
+
+    private JPanel buildTextSection() {
+        JPanel section = createSectionPanel();
+        section.add(createSectionTitle("文本"));
+
+        JPanel sizeRow = createPropertyRow("字号");
+        JSpinner fontSizeSpinner = new JSpinner(new SpinnerNumberModel(selectedNode.getFontSize(), 8, 72, 1));
+        fontSizeSpinner.setPreferredSize(new Dimension(70, 26));
+        fontSizeSpinner.addChangeListener(event -> updateSelectedNodeFontSize((Integer) fontSizeSpinner.getValue()));
+        sizeRow.add(fontSizeSpinner);
+
+        JCheckBox boldCheckBox = new JCheckBox("加粗", selectedNode.isBold());
+        boldCheckBox.setOpaque(false);
+        boldCheckBox.addActionListener(event -> updateSelectedNodeBold(boldCheckBox.isSelected()));
+        sizeRow.add(boldCheckBox);
+        section.add(sizeRow);
+
+        JPanel colorRow = createPropertyRow("颜色");
+        colorRow.add(createColorSwatchButton(resolveTextPreviewColor(selectedNode), "选择文字颜色", this::chooseSelectedNodeTextColor));
+        colorRow.add(createSmallButton("默认", this::resetSelectedNodeTextStyle));
+        section.add(colorRow);
+        return section;
+    }
+
+    private JPanel buildBranchSection() {
+        JPanel section = createSectionPanel();
+        section.add(createSectionTitle("分支"));
+
+        if (selectedNode != null && selectedNode.isRoot()) {
+            JPanel row = createPropertyRow("说明");
+            JLabel label = new JLabel("根节点没有父分支颜色。");
+            label.setForeground(new Color(102, 102, 102));
+            row.add(label);
+            section.add(row);
+            return section;
+        }
+
+        JPanel row = createPropertyRow("颜色");
+        row.add(createColorSwatchButton(resolveBranchPreviewColor(selectedNode), "选择分支颜色", this::chooseSelectedNodeBranchColor));
+        row.add(createSmallButton("自动", this::resetSelectedNodeBranchColor));
+        section.add(row);
+        return section;
+    }
+
+    private JPanel createSectionPanel() {
+        JPanel panel = new JPanel();
+        panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
+        panel.setOpaque(false);
+        panel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return panel;
+    }
+
+    private JLabel createSectionTitle(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(label.getFont().deriveFont(Font.BOLD, 13f));
+        label.setBorder(BorderFactory.createEmptyBorder(0, 0, 6, 0));
+        label.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return label;
+    }
+
+    private JPanel createPropertyRow(String labelText) {
+        JPanel row = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 4));
+        row.setOpaque(false);
+        row.setAlignmentX(Component.LEFT_ALIGNMENT);
+
+        JLabel label = new JLabel(labelText, SwingConstants.LEFT);
+        label.setPreferredSize(new Dimension(44, 24));
+        row.add(label);
+        return row;
+    }
+
+    private JSeparator createSectionSeparator() {
+        JSeparator separator = new JSeparator();
+        separator.setAlignmentX(Component.LEFT_ALIGNMENT);
+        separator.setMaximumSize(new Dimension(Integer.MAX_VALUE, 1));
+        separator.setBorder(BorderFactory.createEmptyBorder(8, 0, 8, 0));
+        return separator;
+    }
+
+    private JButton createPopupActionButton(String text, boolean enabled, JPopupMenu popupMenu, Runnable action) {
+        JButton button = new JButton(text);
+        button.setEnabled(enabled);
+        button.addActionListener(event -> {
+            popupMenu.setVisible(false);
+            action.run();
+        });
+        return button;
+    }
+
+    private JButton createColorSwatchButton(Color color, String toolTip, Runnable action) {
+        JButton button = new JButton();
+        button.setPreferredSize(COLOR_BUTTON_SIZE);
+        button.setBackground(color);
+        button.setOpaque(true);
+        button.setBorder(BorderFactory.createLineBorder(new Color(90, 90, 90)));
+        button.setToolTipText(toolTip);
+        button.addActionListener(event -> action.run());
+        return button;
+    }
+
+    private JButton createSmallButton(String text, Runnable action) {
+        JButton button = new JButton(text);
+        button.addActionListener(event -> action.run());
+        return button;
     }
 
     private void applyLayoutMode(LayoutMode layoutMode) {
@@ -666,8 +926,8 @@ public class MainFrame extends JFrame {
                 2. 单击节点可选中，双击节点可快速重命名。
                 3. 选中中心节点可以添加子节点和切换布局方式。
                 4. 选中普通节点可以添加子节点、兄弟节点，或删除该节点。
-                5. 右击节点或通过“编辑”菜单可以设置填充颜色、取消填充、恢复默认填充。
-                6. “取消填充（仅边框）”会保留节点边框和文字，不再填充背景色。
+                5. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
+                6. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随自定义填充色，否则回退为黑色。
                 7. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
                 """;
         JOptionPane.showMessageDialog(this, helpText, "使用说明", JOptionPane.INFORMATION_MESSAGE);
@@ -695,6 +955,38 @@ public class MainFrame extends JFrame {
 
     private Color defaultFillColor(MindMapNode node) {
         return node != null && node.isRoot() ? ROOT_FILL_COLOR : NODE_FILL_COLOR;
+    }
+
+    private Color defaultBorderColor(MindMapNode node) {
+        return node != null && node.isRoot() ? ROOT_BORDER_COLOR : NODE_BORDER_COLOR;
+    }
+
+    private Color resolveFillPreviewColor(MindMapNode node) {
+        return parseColor(node.getFillColorHex(), defaultFillColor(node));
+    }
+
+    private Color resolveBorderPreviewColor(MindMapNode node) {
+        if (node.getBorderColorHex() != null) {
+            return parseColor(node.getBorderColorHex(), defaultBorderColor(node));
+        }
+        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+            return resolveFillPreviewColor(node);
+        }
+        return defaultBorderColor(node);
+    }
+
+    private Color resolveTextPreviewColor(MindMapNode node) {
+        return parseColor(node.getTextColorHex(), NODE_TEXT_COLOR);
+    }
+
+    private Color resolveBranchPreviewColor(MindMapNode node) {
+        if (node.getBranchColorHex() != null) {
+            return parseColor(node.getBranchColorHex(), BRANCH_FALLBACK_COLOR);
+        }
+        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+            return resolveFillPreviewColor(node);
+        }
+        return BRANCH_FALLBACK_COLOR;
     }
 
     private Color parseColor(String colorHex, Color fallbackColor) {

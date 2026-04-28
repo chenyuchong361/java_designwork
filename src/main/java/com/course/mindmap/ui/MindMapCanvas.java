@@ -1,6 +1,6 @@
 /*
 Script: MindMapCanvas.java
-Purpose: Render the mind map canvas and handle direct node interactions, including fill-only styling.
+Purpose: Render the mind map canvas and handle direct node interactions, including fill, border, text, and branch styling.
 Author: chenyuchong
 Created: 2026-03-14
 Last Updated: 2026-04-28
@@ -14,6 +14,7 @@ Changelog:
 - 2026-04-28 Codex: Simplified rendering to fill-only styling with border-only support. Original author: chenyuchong. Reason: remove unneeded text and line color customization while allowing no-fill nodes. Impact: backward compatible.
 - 2026-04-28 Codex: Matched node border colors to active fill colors when fills are present. Original author: chenyuchong. Reason: border styling is no longer independently configurable and should follow the fill color. Impact: backward compatible.
 - 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
+- 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -50,12 +51,13 @@ public class MindMapCanvas extends JPanel {
     private static final int CANVAS_MARGIN = 80;
     private static final int MIN_WIDTH = 110;
     private static final int MIN_HEIGHT = 38;
-    private static final Font NODE_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 14);
+    private static final Font BASE_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 14);
     private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
-    private static final Color ROOT_LINE_COLOR = new Color(56, 116, 203);
+    private static final Color ROOT_BORDER_COLOR = new Color(56, 116, 203);
     private static final Color NODE_FILL_COLOR = Color.WHITE;
-    private static final Color NODE_LINE_COLOR = new Color(114, 132, 158);
+    private static final Color NODE_BORDER_COLOR = new Color(114, 132, 158);
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
+    private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
     private static final Color SELECTED_HALO_COLOR = new Color(235, 141, 0, 180);
 
     private final MindMapLayoutEngine layoutEngine = new MindMapLayoutEngine();
@@ -74,7 +76,7 @@ public class MindMapCanvas extends JPanel {
     public MindMapCanvas() {
         setBackground(Color.WHITE);
         setOpaque(true);
-        setFont(NODE_FONT);
+        setFont(BASE_FONT);
 
         MouseAdapter mouseAdapter = new MouseAdapter() {
             @Override
@@ -144,8 +146,7 @@ public class MindMapCanvas extends JPanel {
             return;
         }
 
-        FontMetrics metrics = getFontMetrics(getFont());
-        snapshot = layoutEngine.layout(document, node -> measureNode(node, metrics));
+        snapshot = layoutEngine.layout(document, this::measureNode);
 
         Rectangle bounds = snapshot.getContentBounds();
         offsetX = CANVAS_MARGIN - bounds.x;
@@ -207,7 +208,6 @@ public class MindMapCanvas extends JPanel {
 
     private void drawConnections(Graphics2D graphics) {
         graphics.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-        graphics.setColor(withAlpha(NODE_LINE_COLOR, 190));
 
         for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
             MindMapNode node = placement.node();
@@ -240,23 +240,24 @@ public class MindMapCanvas extends JPanel {
                     endX,
                     endY
             );
+            graphics.setColor(withAlpha(resolveBranchColor(node), 200));
             graphics.draw(curve);
         }
     }
 
     private void drawNodes(Graphics2D graphics) {
-        FontMetrics metrics = graphics.getFontMetrics(getFont());
         for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
             MindMapNode node = placement.node();
             Rectangle bounds = placement.copyBounds();
             boolean selected = selectedNode != null && selectedNode.getId().equals(node.getId());
             boolean transparentFill = node.isFillTransparent();
+            Color fillColor = resolveFillColor(node);
+            Color borderColor = resolveBorderColor(node);
+            Color textColor = resolveTextColor(node);
+            Font nodeFont = resolveFont(node);
 
             RoundRectangle2D shape = new RoundRectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
             RoundRectangle2D haloShape = new RoundRectangle2D.Double(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 22, 22);
-            Color lineColor = transparentFill
-                    ? (node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR)
-                    : resolveFillColor(node);
 
             if (selected) {
                 graphics.setColor(SELECTED_HALO_COLOR);
@@ -265,15 +266,17 @@ public class MindMapCanvas extends JPanel {
             }
 
             if (!transparentFill) {
-                graphics.setColor(resolveFillColor(node));
+                graphics.setColor(fillColor);
                 graphics.fill(shape);
             }
 
-            graphics.setColor(lineColor);
+            graphics.setColor(borderColor);
             graphics.setStroke(new BasicStroke(selected ? 2.8f : 1.8f));
             graphics.draw(shape);
 
-            graphics.setColor(NODE_TEXT_COLOR);
+            graphics.setFont(nodeFont);
+            graphics.setColor(textColor);
+            FontMetrics metrics = graphics.getFontMetrics(nodeFont);
             int textWidth = metrics.stringWidth(node.getText());
             int textX = bounds.x + (bounds.width - textWidth) / 2;
             int textY = bounds.y + (bounds.height - metrics.getHeight()) / 2 + metrics.getAscent();
@@ -315,22 +318,56 @@ public class MindMapCanvas extends JPanel {
         );
     }
 
-    private Dimension measureNode(MindMapNode node, FontMetrics metrics) {
+    private Dimension measureNode(MindMapNode node) {
+        FontMetrics metrics = getFontMetrics(resolveFont(node));
         int width = Math.max(MIN_WIDTH, metrics.stringWidth(node.getText()) + 30);
         int height = Math.max(MIN_HEIGHT, metrics.getHeight() + 16);
         return new Dimension(width, height);
     }
 
+    private Font resolveFont(MindMapNode node) {
+        int style = node.isBold() ? Font.BOLD : Font.PLAIN;
+        return BASE_FONT.deriveFont(style, (float) node.getFontSize());
+    }
+
     private Color resolveFillColor(MindMapNode node) {
         Color fallback = node.isRoot() ? ROOT_FILL_COLOR : NODE_FILL_COLOR;
-        String fillColorHex = node.getFillColorHex();
-        if (fillColorHex == null || fillColorHex.isBlank()) {
-            return fallback;
+        return parseColor(node.getFillColorHex(), fallback);
+    }
+
+    private Color resolveBorderColor(MindMapNode node) {
+        Color fallback = node.isRoot() ? ROOT_BORDER_COLOR : NODE_BORDER_COLOR;
+        if (node.getBorderColorHex() != null) {
+            return parseColor(node.getBorderColorHex(), fallback);
+        }
+        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+            return resolveFillColor(node);
+        }
+        return fallback;
+    }
+
+    private Color resolveTextColor(MindMapNode node) {
+        return parseColor(node.getTextColorHex(), NODE_TEXT_COLOR);
+    }
+
+    private Color resolveBranchColor(MindMapNode node) {
+        if (node.getBranchColorHex() != null) {
+            return parseColor(node.getBranchColorHex(), BRANCH_FALLBACK_COLOR);
+        }
+        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+            return resolveFillColor(node);
+        }
+        return BRANCH_FALLBACK_COLOR;
+    }
+
+    private Color parseColor(String colorHex, Color fallbackColor) {
+        if (colorHex == null || colorHex.isBlank()) {
+            return fallbackColor;
         }
         try {
-            return Color.decode(fillColorHex);
+            return Color.decode(colorHex);
         } catch (NumberFormatException exception) {
-            return fallback;
+            return fallbackColor;
         }
     }
 
