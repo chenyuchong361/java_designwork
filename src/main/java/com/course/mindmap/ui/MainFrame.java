@@ -37,6 +37,7 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -47,6 +48,7 @@ import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JColorChooser;
@@ -701,22 +703,7 @@ public class MainFrame extends JFrame {
     }
 
     private JButton createColorSwatchButton(Color color, String title, Consumer<Color> onChoose) {
-        JButton button = new JButton() {
-            @Override
-            protected void paintComponent(Graphics graphics) {
-                Graphics2D graphics2D = (Graphics2D) graphics.create();
-                try {
-                    graphics2D.setColor(Color.WHITE);
-                    graphics2D.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
-                    graphics2D.setColor(color);
-                    graphics2D.fillRoundRect(3, 3, getWidth() - 6, getHeight() - 6, 6, 6);
-                    graphics2D.setColor(new Color(90, 90, 90));
-                    graphics2D.drawRoundRect(3, 3, getWidth() - 7, getHeight() - 7, 6, 6);
-                } finally {
-                    graphics2D.dispose();
-                }
-            }
-        };
+        JButton button = new JButton(new ImageIcon(createColorSwatchImage(color, COLOR_BUTTON_SIZE.width, COLOR_BUTTON_SIZE.height)));
         button.setPreferredSize(COLOR_BUTTON_SIZE);
         button.setMinimumSize(COLOR_BUTTON_SIZE);
         button.setMaximumSize(COLOR_BUTTON_SIZE);
@@ -770,9 +757,11 @@ public class MainFrame extends JFrame {
             if (selectedColor == null) {
                 return;
             }
-            palettePopup.setVisible(false);
-            closeParentPropertyPopup(anchor);
             onChoose.accept(selectedColor);
+            SwingUtilities.invokeLater(() -> {
+                palettePopup.setVisible(false);
+                closeParentPropertyPopup(anchor);
+            });
         });
         footer.add(moreButton);
 
@@ -790,9 +779,11 @@ public class MainFrame extends JFrame {
         button.setBorder(BorderFactory.createLineBorder(new Color(206, 206, 206)));
         button.setOpaque(false);
         button.addActionListener(event -> {
-            palettePopup.setVisible(false);
-            closeParentPropertyPopup(anchor);
             onChoose.accept(color);
+            SwingUtilities.invokeLater(() -> {
+                palettePopup.setVisible(false);
+                closeParentPropertyPopup(anchor);
+            });
         });
         button.setToolTipText(toColorHex(color));
         button.setBackground(color);
@@ -807,6 +798,22 @@ public class MainFrame extends JFrame {
         chip.setBackground(color);
         chip.setBorder(BorderFactory.createLineBorder(new Color(90, 90, 90)));
         return chip;
+    }
+
+    private BufferedImage createColorSwatchImage(Color color, int width, int height) {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D graphics2D = image.createGraphics();
+        try {
+            graphics2D.setColor(Color.WHITE);
+            graphics2D.fillRoundRect(0, 0, width, height, 8, 8);
+            graphics2D.setColor(color);
+            graphics2D.fillRoundRect(3, 3, width - 6, height - 6, 6, 6);
+            graphics2D.setColor(new Color(90, 90, 90));
+            graphics2D.drawRoundRect(3, 3, width - 7, height - 7, 6, 6);
+        } finally {
+            graphics2D.dispose();
+        }
+        return image;
     }
 
     private void closeParentPropertyPopup(Component anchor) {
