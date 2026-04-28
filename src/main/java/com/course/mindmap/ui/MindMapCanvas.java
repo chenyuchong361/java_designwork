@@ -12,6 +12,7 @@ Changelog:
 - 2026-04-27 Codex: Added node right-click context menu callbacks for canvas actions. Original author: chenyuchong. Reason: enable add child, add sibling, and delete actions directly from the drawing area. Impact: backward compatible.
 - 2026-04-27 Codex: Added support for rendering custom node text, fill, and line colors. Original author: chenyuchong. Reason: allow per-node style customization while preserving selection feedback. Impact: backward compatible.
 - 2026-04-28 Codex: Simplified rendering to fill-only styling with border-only support. Original author: chenyuchong. Reason: remove unneeded text and line color customization while allowing no-fill nodes. Impact: backward compatible.
+- 2026-04-28 Codex: Matched node border colors to active fill colors when fills are present. Original author: chenyuchong. Reason: border styling is no longer independently configurable and should follow the fill color. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -254,7 +255,9 @@ public class MindMapCanvas extends JPanel {
             RoundRectangle2D shape = new RoundRectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
             RoundRectangle2D shadowShape = new RoundRectangle2D.Double(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 18, 18);
             RoundRectangle2D haloShape = new RoundRectangle2D.Double(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 22, 22);
-            Color lineColor = node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR;
+            Color lineColor = transparentFill
+                    ? (node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR)
+                    : resolveFillColor(node);
 
             if (!transparentFill) {
                 graphics.setColor(NODE_SHADOW_COLOR);
