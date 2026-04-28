@@ -14,6 +14,7 @@ Changelog:
 - 2026-04-28 Codex: Simplified styling controls to fill-only actions with a no-fill option. Original author: chenyuchong. Reason: match the requested module appearance workflow while keeping default borders. Impact: backward compatible.
 - 2026-04-28 Codex: Replaced the simple fill menu with a right-click node property panel for fill, border, text, and branch styles. Original author: chenyuchong. Reason: align the interaction model with mainstream mind map tools. Impact: backward compatible.
 - 2026-04-28 Codex: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
+- 2026-04-28 Codex: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -27,6 +28,10 @@ import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
@@ -38,6 +43,7 @@ import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -63,6 +69,7 @@ import javax.swing.JTree;
 import javax.swing.KeyStroke;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -78,6 +85,18 @@ public class MainFrame extends JFrame {
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
     private static final Dimension COLOR_BUTTON_SIZE = new Dimension(34, 22);
+    private static final Color[] PALETTE_COLORS = {
+            new Color(255, 255, 255), new Color(245, 245, 245), new Color(224, 224, 224), new Color(189, 189, 189),
+            new Color(117, 117, 117), new Color(66, 66, 66), new Color(33, 33, 33), new Color(0, 0, 0),
+            new Color(255, 205, 86), new Color(255, 138, 128), new Color(129, 199, 132), new Color(77, 208, 225),
+            new Color(100, 181, 246), new Color(121, 134, 203), new Color(186, 104, 200), new Color(244, 143, 177),
+            new Color(255, 179, 0), new Color(255, 82, 82), new Color(76, 175, 80), new Color(0, 188, 212),
+            new Color(33, 150, 243), new Color(63, 81, 181), new Color(156, 39, 176), new Color(233, 30, 99),
+            new Color(255, 152, 0), new Color(244, 67, 54), new Color(46, 125, 50), new Color(0, 131, 143),
+            new Color(2, 119, 189), new Color(40, 53, 147), new Color(123, 31, 162), new Color(173, 20, 87),
+            new Color(255, 111, 0), new Color(211, 47, 47), new Color(27, 94, 32), new Color(0, 96, 100),
+            new Color(1, 87, 155), new Color(26, 35, 126), new Color(74, 20, 140), new Color(136, 14, 79)
+    };
 
     private final MindMapFileManager fileManager = new MindMapFileManager();
     private final MindMapCanvas canvas = new MindMapCanvas();
@@ -419,17 +438,7 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(parent);
     }
 
-    private void chooseSelectedNodeFillColor() {
-        if (!ensureNodeSelected()) {
-            return;
-        }
-
-        Color initialColor = resolveFillPreviewColor(selectedNode);
-        Color selectedColor = JColorChooser.showDialog(this, "选择填充颜色", initialColor);
-        if (selectedColor == null) {
-            return;
-        }
-
+    private void applySelectedNodeFillColor(Color selectedColor) {
         selectedNode.setFillColorHex(toColorHex(selectedColor));
         markDocumentDirtyAndRefresh(selectedNode);
     }
@@ -458,17 +467,7 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(selectedNode);
     }
 
-    private void chooseSelectedNodeBorderColor() {
-        if (!ensureNodeSelected()) {
-            return;
-        }
-
-        Color initialColor = resolveBorderPreviewColor(selectedNode);
-        Color selectedColor = JColorChooser.showDialog(this, "选择边框颜色", initialColor);
-        if (selectedColor == null) {
-            return;
-        }
-
+    private void applySelectedNodeBorderColor(Color selectedColor) {
         selectedNode.setBorderColorHex(toColorHex(selectedColor));
         markDocumentDirtyAndRefresh(selectedNode);
     }
@@ -485,17 +484,7 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(selectedNode);
     }
 
-    private void chooseSelectedNodeTextColor() {
-        if (!ensureNodeSelected()) {
-            return;
-        }
-
-        Color initialColor = resolveTextPreviewColor(selectedNode);
-        Color selectedColor = JColorChooser.showDialog(this, "选择文字颜色", initialColor);
-        if (selectedColor == null) {
-            return;
-        }
-
+    private void applySelectedNodeTextColor(Color selectedColor) {
         selectedNode.setTextColorHex(toColorHex(selectedColor));
         markDocumentDirtyAndRefresh(selectedNode);
     }
@@ -536,17 +525,7 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(selectedNode);
     }
 
-    private void chooseSelectedNodeBranchColor() {
-        if (!ensureNodeSelected() || selectedNode.isRoot()) {
-            return;
-        }
-
-        Color initialColor = resolveBranchPreviewColor(selectedNode);
-        Color selectedColor = JColorChooser.showDialog(this, "选择分支颜色", initialColor);
-        if (selectedColor == null) {
-            return;
-        }
-
+    private void applySelectedNodeBranchColor(Color selectedColor) {
         selectedNode.setBranchColorHex(toColorHex(selectedColor));
         markDocumentDirtyAndRefresh(selectedNode);
     }
@@ -616,8 +595,8 @@ public class MainFrame extends JFrame {
         JPanel section = createSectionPanel();
         section.add(createSectionTitle("填充"));
         JPanel row = createPropertyRow("背景");
-        row.add(createColorSwatchButton(resolveFillPreviewColor(selectedNode), "选择填充颜色", this::chooseSelectedNodeFillColor));
-        row.add(createSmallButton("仅边框", this::setSelectedNodeNoFill));
+        row.add(createColorSwatchButton(resolveFillPreviewColor(selectedNode), "选择填充颜色", this::applySelectedNodeFillColor));
+        row.add(createSmallButton("无填充", this::setSelectedNodeNoFill));
         row.add(createSmallButton("默认", this::resetSelectedNodeFill));
         section.add(row);
         return section;
@@ -627,7 +606,7 @@ public class MainFrame extends JFrame {
         JPanel section = createSectionPanel();
         section.add(createSectionTitle("边框"));
         JPanel row = createPropertyRow("颜色");
-        row.add(createColorSwatchButton(resolveBorderPreviewColor(selectedNode), "选择边框颜色", this::chooseSelectedNodeBorderColor));
+        row.add(createColorSwatchButton(resolveBorderPreviewColor(selectedNode), "选择边框颜色", this::applySelectedNodeBorderColor));
         row.add(createSmallButton("自动", this::resetSelectedNodeBorder));
         section.add(row);
         return section;
@@ -650,7 +629,7 @@ public class MainFrame extends JFrame {
         section.add(sizeRow);
 
         JPanel colorRow = createPropertyRow("颜色");
-        colorRow.add(createColorSwatchButton(resolveTextPreviewColor(selectedNode), "选择文字颜色", this::chooseSelectedNodeTextColor));
+        colorRow.add(createColorSwatchButton(resolveTextPreviewColor(selectedNode), "选择文字颜色", this::applySelectedNodeTextColor));
         colorRow.add(createSmallButton("默认", this::resetSelectedNodeTextStyle));
         section.add(colorRow);
         return section;
@@ -670,7 +649,7 @@ public class MainFrame extends JFrame {
         }
 
         JPanel row = createPropertyRow("颜色");
-        row.add(createColorSwatchButton(resolveBranchPreviewColor(selectedNode), "选择分支颜色", this::chooseSelectedNodeBranchColor));
+        row.add(createColorSwatchButton(resolveBranchPreviewColor(selectedNode), "选择分支颜色", this::applySelectedNodeBranchColor));
         row.add(createSmallButton("自动", this::resetSelectedNodeBranchColor));
         section.add(row);
         return section;
@@ -721,14 +700,33 @@ public class MainFrame extends JFrame {
         return button;
     }
 
-    private JButton createColorSwatchButton(Color color, String toolTip, Runnable action) {
-        JButton button = new JButton();
+    private JButton createColorSwatchButton(Color color, String title, Consumer<Color> onChoose) {
+        JButton button = new JButton() {
+            @Override
+            protected void paintComponent(Graphics graphics) {
+                Graphics2D graphics2D = (Graphics2D) graphics.create();
+                try {
+                    graphics2D.setColor(Color.WHITE);
+                    graphics2D.fillRoundRect(0, 0, getWidth(), getHeight(), 8, 8);
+                    graphics2D.setColor(color);
+                    graphics2D.fillRoundRect(3, 3, getWidth() - 6, getHeight() - 6, 6, 6);
+                    graphics2D.setColor(new Color(90, 90, 90));
+                    graphics2D.drawRoundRect(3, 3, getWidth() - 7, getHeight() - 7, 6, 6);
+                } finally {
+                    graphics2D.dispose();
+                }
+            }
+        };
         button.setPreferredSize(COLOR_BUTTON_SIZE);
-        button.setBackground(color);
-        button.setOpaque(true);
-        button.setBorder(BorderFactory.createLineBorder(new Color(90, 90, 90)));
-        button.setToolTipText(toolTip);
-        button.addActionListener(event -> action.run());
+        button.setMinimumSize(COLOR_BUTTON_SIZE);
+        button.setMaximumSize(COLOR_BUTTON_SIZE);
+        button.setMargin(new Insets(0, 0, 0, 0));
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createEmptyBorder());
+        button.setOpaque(false);
+        button.setToolTipText(title);
+        button.addActionListener(event -> showColorPalettePopup(button, title, color, onChoose));
         return button;
     }
 
@@ -736,6 +734,86 @@ public class MainFrame extends JFrame {
         JButton button = new JButton(text);
         button.addActionListener(event -> action.run());
         return button;
+    }
+
+    private void showColorPalettePopup(Component anchor, String title, Color initialColor, Consumer<Color> onChoose) {
+        JPopupMenu palettePopup = new JPopupMenu();
+        palettePopup.setBorder(BorderFactory.createLineBorder(new Color(218, 218, 218)));
+
+        JPanel content = new JPanel();
+        content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
+        content.setBackground(Color.WHITE);
+        content.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+
+        JPanel grid = new JPanel(new GridLayout(5, 8, 4, 4));
+        grid.setOpaque(false);
+        for (Color paletteColor : PALETTE_COLORS) {
+            grid.add(createPaletteColorButton(paletteColor, palettePopup, anchor, onChoose));
+        }
+        content.add(grid);
+        content.add(Box.createVerticalStrut(10));
+
+        JPanel footer = new JPanel(new FlowLayout(FlowLayout.LEFT, 8, 0));
+        footer.setOpaque(false);
+
+        JLabel hexLabel = new JLabel(toColorHex(initialColor));
+        hexLabel.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(214, 214, 214)),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        ));
+        footer.add(hexLabel);
+        footer.add(createColorPreviewChip(initialColor));
+
+        JButton moreButton = new JButton("更多颜色");
+        moreButton.addActionListener(event -> {
+            Color selectedColor = JColorChooser.showDialog(this, title, initialColor);
+            if (selectedColor == null) {
+                return;
+            }
+            palettePopup.setVisible(false);
+            closeParentPropertyPopup(anchor);
+            onChoose.accept(selectedColor);
+        });
+        footer.add(moreButton);
+
+        content.add(footer);
+        palettePopup.add(content);
+        palettePopup.show(anchor, 0, anchor.getHeight() + 4);
+    }
+
+    private JButton createPaletteColorButton(Color color, JPopupMenu palettePopup, Component anchor, Consumer<Color> onChoose) {
+        JButton button = new JButton();
+        button.setPreferredSize(new Dimension(24, 24));
+        button.setMargin(new Insets(0, 0, 0, 0));
+        button.setContentAreaFilled(false);
+        button.setFocusPainted(false);
+        button.setBorder(BorderFactory.createLineBorder(new Color(206, 206, 206)));
+        button.setOpaque(false);
+        button.addActionListener(event -> {
+            palettePopup.setVisible(false);
+            closeParentPropertyPopup(anchor);
+            onChoose.accept(color);
+        });
+        button.setToolTipText(toColorHex(color));
+        button.setBackground(color);
+        button.setUI(new javax.swing.plaf.basic.BasicButtonUI());
+        button.setOpaque(true);
+        return button;
+    }
+
+    private JPanel createColorPreviewChip(Color color) {
+        JPanel chip = new JPanel();
+        chip.setPreferredSize(new Dimension(24, 24));
+        chip.setBackground(color);
+        chip.setBorder(BorderFactory.createLineBorder(new Color(90, 90, 90)));
+        return chip;
+    }
+
+    private void closeParentPropertyPopup(Component anchor) {
+        JPopupMenu parentPopup = (JPopupMenu) SwingUtilities.getAncestorOfClass(JPopupMenu.class, anchor);
+        if (parentPopup != null) {
+            parentPopup.setVisible(false);
+        }
     }
 
     private void applyLayoutMode(LayoutMode layoutMode) {
@@ -929,7 +1007,7 @@ public class MainFrame extends JFrame {
                 3. 选中中心节点可以添加子节点和切换布局方式。
                 4. 选中普通节点可以添加子节点、兄弟节点，或删除该节点。
                 5. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
-                6. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随自定义填充色，否则回退为黑色。
+                6. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
                 7. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
                 """;
         JOptionPane.showMessageDialog(this, helpText, "使用说明", JOptionPane.INFORMATION_MESSAGE);
@@ -971,7 +1049,7 @@ public class MainFrame extends JFrame {
         if (node.getBorderColorHex() != null) {
             return parseColor(node.getBorderColorHex(), defaultBorderColor(node));
         }
-        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+        if (!node.isFillTransparent()) {
             return resolveFillPreviewColor(node);
         }
         return defaultBorderColor(node);
@@ -985,7 +1063,7 @@ public class MainFrame extends JFrame {
         if (node.getBranchColorHex() != null) {
             return parseColor(node.getBranchColorHex(), BRANCH_FALLBACK_COLOR);
         }
-        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+        if (!node.isFillTransparent()) {
             return resolveFillPreviewColor(node);
         }
         return BRANCH_FALLBACK_COLOR;

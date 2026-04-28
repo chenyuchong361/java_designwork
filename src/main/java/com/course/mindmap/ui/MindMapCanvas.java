@@ -15,6 +15,7 @@ Changelog:
 - 2026-04-28 Codex: Matched node border colors to active fill colors when fills are present. Original author: chenyuchong. Reason: border styling is no longer independently configurable and should follow the fill color. Impact: backward compatible.
 - 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
 - 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
+- 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -340,7 +341,7 @@ public class MindMapCanvas extends JPanel {
         if (node.getBorderColorHex() != null) {
             return parseColor(node.getBorderColorHex(), fallback);
         }
-        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+        if (!node.isFillTransparent()) {
             return resolveFillColor(node);
         }
         return fallback;
@@ -354,7 +355,7 @@ public class MindMapCanvas extends JPanel {
         if (node.getBranchColorHex() != null) {
             return parseColor(node.getBranchColorHex(), BRANCH_FALLBACK_COLOR);
         }
-        if (node.hasCustomFillStyle() && !node.isFillTransparent()) {
+        if (!node.isFillTransparent()) {
             return resolveFillColor(node);
         }
         return BRANCH_FALLBACK_COLOR;
