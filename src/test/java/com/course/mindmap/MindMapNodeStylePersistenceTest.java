@@ -1,14 +1,15 @@
 /*
 Script: MindMapNodeStylePersistenceTest.java
-Purpose: Verify that custom node text, fill, and line colors survive save/load round trips.
+Purpose: Verify that node fill, border, text, and branch styles survive save/load round trips.
 Author: Codex
 Created: 2026-04-27
-Last Updated: 2026-04-27
+Last Updated: 2026-04-28
 Dependencies: JUnit 5, java.nio.file, com.course.mindmap.io, com.course.mindmap.model
 Usage: Run with the Maven test phase.
 
 Changelog:
 - 2026-04-27 Codex: Initial creation.
+- 2026-04-28 Codex: Expanded the test to cover border, text, and branch style persistence. Reason: validate the new node property panel data model. Impact: backward compatible.
 */
 package com.course.mindmap;
 
@@ -20,20 +21,27 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MindMapNodeStylePersistenceTest {
     @Test
     void saveAndLoadShouldPreserveNodeStyles() throws Exception {
         MindMapDocument document = MindMapDocument.createBlank();
         MindMapNode root = document.getRoot();
-        root.setTextColorHex("#112233");
         root.setFillColorHex("#445566");
-        root.setLineColorHex("#778899");
+        root.setBorderColorHex("#778899");
+        root.setTextColorHex("#112233");
+        root.setFontSize(18);
+        root.setBold(true);
 
         MindMapNode child = root.addChild("Styled Child");
-        child.setTextColorHex("#AA5500");
-        child.setFillColorHex("#DDEEFF");
-        child.setLineColorHex("#00AA88");
+        child.setFillTransparent(true);
+        child.setBorderColorHex("#AA5500");
+        child.setTextColorHex("#2255AA");
+        child.setFontSize(20);
+        child.setBold(true);
+        child.setBranchColorHex("#00AA88");
 
         Path tempFile = Files.createTempFile("mind-map-style-", ".dt");
         try {
@@ -44,12 +52,19 @@ class MindMapNodeStylePersistenceTest {
             MindMapNode loadedRoot = loaded.getRoot();
             MindMapNode loadedChild = loadedRoot.getChildren().get(0);
 
-            assertEquals("#112233", loadedRoot.getTextColorHex());
             assertEquals("#445566", loadedRoot.getFillColorHex());
-            assertEquals("#778899", loadedRoot.getLineColorHex());
-            assertEquals("#AA5500", loadedChild.getTextColorHex());
-            assertEquals("#DDEEFF", loadedChild.getFillColorHex());
-            assertEquals("#00AA88", loadedChild.getLineColorHex());
+            assertEquals("#778899", loadedRoot.getBorderColorHex());
+            assertEquals("#112233", loadedRoot.getTextColorHex());
+            assertEquals(18, loadedRoot.getFontSize());
+            assertTrue(loadedRoot.isBold());
+
+            assertTrue(loadedChild.isFillTransparent());
+            assertNull(loadedChild.getFillColorHex());
+            assertEquals("#AA5500", loadedChild.getBorderColorHex());
+            assertEquals("#2255AA", loadedChild.getTextColorHex());
+            assertEquals(20, loadedChild.getFontSize());
+            assertTrue(loadedChild.isBold());
+            assertEquals("#00AA88", loadedChild.getBranchColorHex());
         } finally {
             Files.deleteIfExists(tempFile);
         }

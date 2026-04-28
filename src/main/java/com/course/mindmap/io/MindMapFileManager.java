@@ -1,15 +1,17 @@
 /*
 Script: MindMapFileManager.java
-Purpose: Save and load mind map documents, including per-node visual style settings.
+Purpose: Save and load mind map documents, including node fill, border, text, and branch styles.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-27
+Last Updated: 2026-04-28
 Dependencies: Java XML APIs, com.course.mindmap.model
 Usage: Called by MainFrame when persisting or opening .dt mind map files.
 
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
 - 2026-04-27 Codex: Added persistence for node text, fill, and line colors. Original author: chenyuchong. Reason: preserve user-selected node styles across save and load operations. Impact: backward compatible.
+- 2026-04-28 Codex: Simplified persistence to fill-only styling with no-fill support. Original author: chenyuchong. Reason: match the reduced UI styling scope while preserving border-only nodes. Impact: backward compatible.
+- 2026-04-28 Codex: Extended persistence to border, text, and branch styles for the node property popup. Original author: chenyuchong. Reason: keep styling behavior consistent after saving and reopening mind maps. Impact: backward compatible.
 */
 package com.course.mindmap.io;
 
@@ -74,9 +76,19 @@ public class MindMapFileManager {
         Element element = xmlDocument.createElement("node");
         element.setAttribute("id", node.getId());
         element.setAttribute("text", node.getText());
-        writeOptionalAttribute(element, "text-color", node.getTextColorHex());
         writeOptionalAttribute(element, "fill-color", node.getFillColorHex());
-        writeOptionalAttribute(element, "line-color", node.getLineColorHex());
+        if (node.isFillTransparent()) {
+            element.setAttribute("fill-transparent", "true");
+        }
+        writeOptionalAttribute(element, "border-color", node.getBorderColorHex());
+        writeOptionalAttribute(element, "text-color", node.getTextColorHex());
+        if (node.getFontSize() != MindMapNode.DEFAULT_FONT_SIZE) {
+            element.setAttribute("font-size", String.valueOf(node.getFontSize()));
+        }
+        if (node.isBold()) {
+            element.setAttribute("bold", "true");
+        }
+        writeOptionalAttribute(element, "branch-color", node.getBranchColorHex());
 
         for (MindMapNode child : node.getChildren()) {
             element.appendChild(writeNode(xmlDocument, child));
@@ -86,9 +98,24 @@ public class MindMapFileManager {
 
     private MindMapNode readNode(Element element) {
         MindMapNode node = new MindMapNode(element.getAttribute("id"), element.getAttribute("text"));
-        node.setTextColorHex(readOptionalAttribute(element, "text-color"));
         node.setFillColorHex(readOptionalAttribute(element, "fill-color"));
-        node.setLineColorHex(readOptionalAttribute(element, "line-color"));
+        if (Boolean.parseBoolean(readOptionalAttribute(element, "fill-transparent"))) {
+            node.setFillTransparent(true);
+        }
+
+        String borderColor = readOptionalAttribute(element, "border-color");
+        if (borderColor == null) {
+            borderColor = readOptionalAttribute(element, "line-color");
+        }
+        node.setBorderColorHex(borderColor);
+        node.setTextColorHex(readOptionalAttribute(element, "text-color"));
+
+        Integer fontSize = readOptionalIntegerAttribute(element, "font-size");
+        if (fontSize != null) {
+            node.setFontSize(fontSize);
+        }
+        node.setBold(Boolean.parseBoolean(readOptionalAttribute(element, "bold")));
+        node.setBranchColorHex(readOptionalAttribute(element, "branch-color"));
 
         NodeList childNodes = element.getChildNodes();
         for (int i = 0; i < childNodes.getLength(); i++) {
@@ -120,5 +147,17 @@ public class MindMapFileManager {
     private String readOptionalAttribute(Element element, String name) {
         String value = element.getAttribute(name);
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private Integer readOptionalIntegerAttribute(Element element, String name) {
+        String value = readOptionalAttribute(element, name);
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException exception) {
+            return null;
+        }
     }
 }
