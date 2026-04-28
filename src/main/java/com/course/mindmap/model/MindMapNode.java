@@ -1,6 +1,6 @@
 /*
 Script: MindMapNode.java
-Purpose: Represent a mind map node, including hierarchy and optional fill styling.
+Purpose: Represent a mind map node, including hierarchy and configurable visual properties.
 Author: chenyuchong
 Created: 2026-03-14
 Last Updated: 2026-04-28
@@ -11,6 +11,7 @@ Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
 - 2026-04-27 Codex: Added per-node text, fill, and line color properties for customizable rendering. Original author: chenyuchong. Reason: support user-controlled node styling that can be saved and restored. Impact: backward compatible.
 - 2026-04-28 Codex: Reduced styling to fill-only state with no-fill support. Original author: chenyuchong. Reason: keep module styling focused on background fill while allowing border-only display. Impact: backward compatible.
+- 2026-04-28 Codex: Added node border, text, and branch style properties for the right-click property panel. Original author: chenyuchong. Reason: match modern mind map styling workflows with localized property editing. Impact: backward compatible.
 */
 package com.course.mindmap.model;
 
@@ -22,10 +23,17 @@ import java.util.Objects;
 import java.util.UUID;
 
 public class MindMapNode {
+    public static final int DEFAULT_FONT_SIZE = 14;
+
     private final String id;
     private String text;
     private String fillColorHex;
     private boolean fillTransparent;
+    private String borderColorHex;
+    private String textColorHex;
+    private int fontSize = DEFAULT_FONT_SIZE;
+    private boolean bold;
+    private String branchColorHex;
     private MindMapNode parent;
     private final List<MindMapNode> children = new ArrayList<>();
 
@@ -71,6 +79,46 @@ public class MindMapNode {
         if (fillTransparent) {
             this.fillColorHex = null;
         }
+    }
+
+    public String getBorderColorHex() {
+        return borderColorHex;
+    }
+
+    public void setBorderColorHex(String borderColorHex) {
+        this.borderColorHex = normalizeColorHex(borderColorHex);
+    }
+
+    public String getTextColorHex() {
+        return textColorHex;
+    }
+
+    public void setTextColorHex(String textColorHex) {
+        this.textColorHex = normalizeColorHex(textColorHex);
+    }
+
+    public int getFontSize() {
+        return fontSize;
+    }
+
+    public void setFontSize(int fontSize) {
+        this.fontSize = Math.max(8, Math.min(72, fontSize));
+    }
+
+    public boolean isBold() {
+        return bold;
+    }
+
+    public void setBold(boolean bold) {
+        this.bold = bold;
+    }
+
+    public String getBranchColorHex() {
+        return branchColorHex;
+    }
+
+    public void setBranchColorHex(String branchColorHex) {
+        this.branchColorHex = normalizeColorHex(branchColorHex);
     }
 
     public MindMapNode getParent() {
@@ -131,6 +179,32 @@ public class MindMapNode {
     public void clearCustomFillStyle() {
         fillColorHex = null;
         fillTransparent = false;
+    }
+
+    public boolean hasCustomBorderStyle() {
+        return borderColorHex != null;
+    }
+
+    public void clearCustomBorderStyle() {
+        borderColorHex = null;
+    }
+
+    public boolean hasCustomTextStyle() {
+        return textColorHex != null || fontSize != DEFAULT_FONT_SIZE || bold;
+    }
+
+    public void clearCustomTextStyle() {
+        textColorHex = null;
+        fontSize = DEFAULT_FONT_SIZE;
+        bold = false;
+    }
+
+    public boolean hasCustomBranchStyle() {
+        return branchColorHex != null;
+    }
+
+    public void clearCustomBranchStyle() {
+        branchColorHex = null;
     }
 
     public MindMapNode findById(String nodeId) {
