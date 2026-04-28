@@ -16,6 +16,7 @@ Changelog:
 - 2026-04-28 Codex: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
 - 2026-04-28 Codex: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
 - 2026-04-28 Codex: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
+- 2026-04-28 Codex: Changed the default child-node fill to blue. Original author: chenyuchong. Reason: new child nodes should start with a blue fill instead of appearing unfilled. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -93,7 +94,7 @@ public class MainFrame extends JFrame {
 
     private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
     private static final Color ROOT_BORDER_COLOR = new Color(56, 116, 203);
-    private static final Color NODE_FILL_COLOR = Color.WHITE;
+    private static final Color NODE_FILL_COLOR = new Color(227, 241, 255);
     private static final Color NODE_BORDER_COLOR = new Color(114, 132, 158);
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;

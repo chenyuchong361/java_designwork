@@ -16,6 +16,7 @@ Changelog:
 - 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
 - 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
 - 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
+- 2026-04-28 Codex: Changed the default child-node fill to blue. Original author: chenyuchong. Reason: new child nodes should start with a blue fill instead of appearing unfilled. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -55,7 +56,7 @@ public class MindMapCanvas extends JPanel {
     private static final Font BASE_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 14);
     private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
     private static final Color ROOT_BORDER_COLOR = new Color(56, 116, 203);
-    private static final Color NODE_FILL_COLOR = Color.WHITE;
+    private static final Color NODE_FILL_COLOR = new Color(227, 241, 255);
     private static final Color NODE_BORDER_COLOR = new Color(114, 132, 158);
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
