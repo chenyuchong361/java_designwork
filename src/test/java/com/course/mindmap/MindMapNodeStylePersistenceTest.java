@@ -1,14 +1,15 @@
 /*
 Script: MindMapNodeStylePersistenceTest.java
-Purpose: Verify that custom node text, fill, and line colors survive save/load round trips.
+Purpose: Verify that custom fill color and no-fill node states survive save/load round trips.
 Author: Codex
 Created: 2026-04-27
-Last Updated: 2026-04-27
+Last Updated: 2026-04-28
 Dependencies: JUnit 5, java.nio.file, com.course.mindmap.io, com.course.mindmap.model
 Usage: Run with the Maven test phase.
 
 Changelog:
 - 2026-04-27 Codex: Initial creation.
+- 2026-04-28 Codex: Updated the test to cover fill-only styling and border-only nodes. Reason: match the reduced styling scope requested by the user. Impact: backward compatible.
 */
 package com.course.mindmap;
 
@@ -20,20 +21,18 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MindMapNodeStylePersistenceTest {
     @Test
-    void saveAndLoadShouldPreserveNodeStyles() throws Exception {
+    void saveAndLoadShouldPreserveNodeFillStyles() throws Exception {
         MindMapDocument document = MindMapDocument.createBlank();
         MindMapNode root = document.getRoot();
-        root.setTextColorHex("#112233");
         root.setFillColorHex("#445566");
-        root.setLineColorHex("#778899");
 
-        MindMapNode child = root.addChild("Styled Child");
-        child.setTextColorHex("#AA5500");
-        child.setFillColorHex("#DDEEFF");
-        child.setLineColorHex("#00AA88");
+        MindMapNode child = root.addChild("Border Only Child");
+        child.setFillTransparent(true);
 
         Path tempFile = Files.createTempFile("mind-map-style-", ".dt");
         try {
@@ -44,12 +43,10 @@ class MindMapNodeStylePersistenceTest {
             MindMapNode loadedRoot = loaded.getRoot();
             MindMapNode loadedChild = loadedRoot.getChildren().get(0);
 
-            assertEquals("#112233", loadedRoot.getTextColorHex());
             assertEquals("#445566", loadedRoot.getFillColorHex());
-            assertEquals("#778899", loadedRoot.getLineColorHex());
-            assertEquals("#AA5500", loadedChild.getTextColorHex());
-            assertEquals("#DDEEFF", loadedChild.getFillColorHex());
-            assertEquals("#00AA88", loadedChild.getLineColorHex());
+            assertEquals(false, loadedRoot.isFillTransparent());
+            assertTrue(loadedChild.isFillTransparent());
+            assertNull(loadedChild.getFillColorHex());
         } finally {
             Files.deleteIfExists(tempFile);
         }

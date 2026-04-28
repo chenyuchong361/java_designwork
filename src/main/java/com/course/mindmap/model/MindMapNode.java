@@ -1,15 +1,16 @@
 /*
 Script: MindMapNode.java
-Purpose: Represent a mind map node, including hierarchy and custom visual style settings.
+Purpose: Represent a mind map node, including hierarchy and optional fill styling.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-27
+Last Updated: 2026-04-28
 Dependencies: java.util
 Usage: Used by the document, UI, and file persistence layers to manage node data.
 
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
 - 2026-04-27 Codex: Added per-node text, fill, and line color properties for customizable rendering. Original author: chenyuchong. Reason: support user-controlled node styling that can be saved and restored. Impact: backward compatible.
+- 2026-04-28 Codex: Reduced styling to fill-only state with no-fill support. Original author: chenyuchong. Reason: keep module styling focused on background fill while allowing border-only display. Impact: backward compatible.
 */
 package com.course.mindmap.model;
 
@@ -23,9 +24,8 @@ import java.util.UUID;
 public class MindMapNode {
     private final String id;
     private String text;
-    private String textColorHex;
     private String fillColorHex;
-    private String lineColorHex;
+    private boolean fillTransparent;
     private MindMapNode parent;
     private final List<MindMapNode> children = new ArrayList<>();
 
@@ -48,15 +48,7 @@ public class MindMapNode {
 
     public void setText(String text) {
         String normalized = text == null ? "" : text.strip();
-        this.text = normalized.isBlank() ? "\u65b0\u8282\u70b9" : normalized;
-    }
-
-    public String getTextColorHex() {
-        return textColorHex;
-    }
-
-    public void setTextColorHex(String textColorHex) {
-        this.textColorHex = normalizeColorHex(textColorHex);
+        this.text = normalized.isBlank() ? "新节点" : normalized;
     }
 
     public String getFillColorHex() {
@@ -65,14 +57,20 @@ public class MindMapNode {
 
     public void setFillColorHex(String fillColorHex) {
         this.fillColorHex = normalizeColorHex(fillColorHex);
+        if (this.fillColorHex != null) {
+            this.fillTransparent = false;
+        }
     }
 
-    public String getLineColorHex() {
-        return lineColorHex;
+    public boolean isFillTransparent() {
+        return fillTransparent;
     }
 
-    public void setLineColorHex(String lineColorHex) {
-        this.lineColorHex = normalizeColorHex(lineColorHex);
+    public void setFillTransparent(boolean fillTransparent) {
+        this.fillTransparent = fillTransparent;
+        if (fillTransparent) {
+            this.fillColorHex = null;
+        }
     }
 
     public MindMapNode getParent() {
@@ -126,14 +124,13 @@ public class MindMapNode {
         }
     }
 
-    public boolean hasCustomStyle() {
-        return textColorHex != null || fillColorHex != null || lineColorHex != null;
+    public boolean hasCustomFillStyle() {
+        return fillColorHex != null || fillTransparent;
     }
 
-    public void clearCustomStyle() {
-        textColorHex = null;
+    public void clearCustomFillStyle() {
         fillColorHex = null;
-        lineColorHex = null;
+        fillTransparent = false;
     }
 
     public MindMapNode findById(String nodeId) {
