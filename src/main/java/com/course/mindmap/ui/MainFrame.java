@@ -13,6 +13,7 @@ Changelog:
 - 2026-04-27 Codex: Added per-node text, fill, and line color editing actions with style persistence support. Original author: chenyuchong. Reason: allow users to customize module appearance directly in the application. Impact: backward compatible.
 - 2026-04-28 Codex: Simplified styling controls to fill-only actions with a no-fill option. Original author: chenyuchong. Reason: match the requested module appearance workflow while keeping default borders. Impact: backward compatible.
 - 2026-04-28 Codex: Replaced the simple fill menu with a right-click node property panel for fill, border, text, and branch styles. Original author: chenyuchong. Reason: align the interaction model with mainstream mind map tools. Impact: backward compatible.
+- 2026-04-28 Codex: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -578,7 +579,6 @@ public class MainFrame extends JFrame {
         panel.setLayout(new BoxLayout(panel, BoxLayout.Y_AXIS));
         panel.setBackground(Color.WHITE);
         panel.setBorder(BorderFactory.createEmptyBorder(12, 12, 12, 12));
-        panel.setPreferredSize(new Dimension(300, 0));
 
         JLabel title = new JLabel("节点属性");
         title.setFont(title.getFont().deriveFont(Font.BOLD, 14f));
@@ -594,6 +594,8 @@ public class MainFrame extends JFrame {
         panel.add(buildTextSection());
         panel.add(createSectionSeparator());
         panel.add(buildBranchSection());
+        Dimension preferredSize = panel.getPreferredSize();
+        panel.setPreferredSize(new Dimension(Math.max(300, preferredSize.width), preferredSize.height));
         return panel;
     }
 
