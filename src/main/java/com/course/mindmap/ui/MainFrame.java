@@ -35,6 +35,8 @@ import java.awt.Insets;
 import java.awt.Point;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
@@ -72,6 +74,7 @@ import javax.swing.KeyStroke;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.UIManager;
 import javax.swing.filechooser.FileFilter;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import javax.swing.tree.DefaultMutableTreeNode;
@@ -87,6 +90,7 @@ public class MainFrame extends JFrame {
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
     private static final Dimension COLOR_BUTTON_SIZE = new Dimension(34, 22);
+    private static final Dimension PALETTE_TILE_SIZE = new Dimension(28, 28);
     private static final Color[] PALETTE_COLORS = {
             new Color(255, 255, 255), new Color(245, 245, 245), new Color(224, 224, 224), new Color(189, 189, 189),
             new Color(117, 117, 117), new Color(66, 66, 66), new Color(33, 33, 33), new Color(0, 0, 0),
@@ -735,7 +739,7 @@ public class MainFrame extends JFrame {
         JPanel grid = new JPanel(new GridLayout(5, 8, 4, 4));
         grid.setOpaque(false);
         for (Color paletteColor : PALETTE_COLORS) {
-            grid.add(createPaletteColorButton(paletteColor, palettePopup, anchor, onChoose));
+            grid.add(createPaletteColorTile(paletteColor, palettePopup, anchor, onChoose));
         }
         content.add(grid);
         content.add(Box.createVerticalStrut(10));
@@ -770,26 +774,35 @@ public class MainFrame extends JFrame {
         palettePopup.show(anchor, 0, anchor.getHeight() + 4);
     }
 
-    private JButton createPaletteColorButton(Color color, JPopupMenu palettePopup, Component anchor, Consumer<Color> onChoose) {
-        JButton button = new JButton();
-        button.setPreferredSize(new Dimension(24, 24));
-        button.setMargin(new Insets(0, 0, 0, 0));
-        button.setContentAreaFilled(false);
-        button.setFocusPainted(false);
-        button.setBorder(BorderFactory.createLineBorder(new Color(206, 206, 206)));
-        button.setOpaque(false);
-        button.addActionListener(event -> {
-            onChoose.accept(color);
-            SwingUtilities.invokeLater(() -> {
-                palettePopup.setVisible(false);
-                closeParentPropertyPopup(anchor);
-            });
+    private JPanel createPaletteColorTile(Color color, JPopupMenu palettePopup, Component anchor, Consumer<Color> onChoose) {
+        JPanel tile = new JPanel();
+        tile.setPreferredSize(PALETTE_TILE_SIZE);
+        tile.setBackground(color);
+        tile.setBorder(BorderFactory.createLineBorder(new Color(206, 206, 206)));
+        tile.setToolTipText(toColorHex(color));
+        tile.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                onChoose.accept(color);
+                SwingUtilities.invokeLater(() -> {
+                    palettePopup.setVisible(false);
+                    closeParentPropertyPopup(anchor);
+                });
+            }
+
+            @Override
+            public void mouseEntered(MouseEvent event) {
+                tile.setBorder(BorderFactory.createLineBorder(UIManager.getColor("Component.focusColor") != null
+                        ? UIManager.getColor("Component.focusColor")
+                        : new Color(76, 132, 255), 2));
+            }
+
+            @Override
+            public void mouseExited(MouseEvent event) {
+                tile.setBorder(BorderFactory.createLineBorder(new Color(206, 206, 206)));
+            }
         });
-        button.setToolTipText(toColorHex(color));
-        button.setBackground(color);
-        button.setUI(new javax.swing.plaf.basic.BasicButtonUI());
-        button.setOpaque(true);
-        return button;
+        return tile;
     }
 
     private JPanel createColorPreviewChip(Color color) {
