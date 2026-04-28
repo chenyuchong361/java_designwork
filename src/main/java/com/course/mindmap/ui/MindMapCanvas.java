@@ -17,6 +17,7 @@ Changelog:
 - 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
 - 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
 - 2026-04-28 Codex: Changed the default child-node fill to blue. Original author: chenyuchong. Reason: new child nodes should start with a blue fill instead of appearing unfilled. Impact: backward compatible.
+- 2026-04-28 Codex: Replaced curved connectors with right-angle straight connectors. Original author: chenyuchong. Reason: match the requested mind map line style while preserving the existing layout engine. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -36,11 +37,13 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.geom.CubicCurve2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -211,39 +214,65 @@ public class MindMapCanvas extends JPanel {
     private void drawConnections(Graphics2D graphics) {
         graphics.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
 
-        for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
-            MindMapNode node = placement.node();
-            if (node.isRoot()) {
-                continue;
-            }
-
-            LayoutSnapshot.NodePlacement parentPlacement = snapshot.getPlacement(node.getParent().getId());
-            if (parentPlacement == null) {
+        for (LayoutSnapshot.NodePlacement parentPlacement : snapshot.getPlacements().values()) {
+            MindMapNode parentNode = parentPlacement.node();
+            if (parentNode.getChildren().isEmpty()) {
                 continue;
             }
 
             Rectangle parentBounds = parentPlacement.copyBounds();
-            Rectangle childBounds = placement.copyBounds();
-            boolean rightSide = childBounds.getCenterX() >= parentBounds.getCenterX();
+            List<LayoutSnapshot.NodePlacement> rightChildren = new ArrayList<>();
+            List<LayoutSnapshot.NodePlacement> leftChildren = new ArrayList<>();
 
-            int startX = rightSide ? parentBounds.x + parentBounds.width : parentBounds.x;
+            for (MindMapNode childNode : parentNode.getChildren()) {
+                LayoutSnapshot.NodePlacement childPlacement = snapshot.getPlacement(childNode.getId());
+                if (childPlacement == null) {
+                    continue;
+                }
+                Rectangle childBounds = childPlacement.copyBounds();
+                if (childBounds.getCenterX() >= parentBounds.getCenterX()) {
+                    rightChildren.add(childPlacement);
+                } else {
+                    leftChildren.add(childPlacement);
+                }
+            }
+
+            drawConnectionGroup(graphics, parentBounds, rightChildren, true);
+            drawConnectionGroup(graphics, parentBounds, leftChildren, false);
+        }
+    }
+
+    private void drawConnectionGroup(
+            Graphics2D graphics,
+            Rectangle parentBounds,
+            List<LayoutSnapshot.NodePlacement> children,
+            boolean rightSide
+    ) {
+        if (children.isEmpty()) {
+            return;
+        }
+
+        children.sort(Comparator.comparingInt(placement -> placement.copyBounds().y));
+        int startX = rightSide ? parentBounds.x + parentBounds.width : parentBounds.x;
+        int startY = parentBounds.y + parentBounds.height / 2;
+        int nearestChildX = children.stream()
+                .map(LayoutSnapshot.NodePlacement::copyBounds)
+                .mapToInt(bounds -> rightSide ? bounds.x : bounds.x + bounds.width)
+                .min()
+                .orElse(startX);
+        int horizontalGap = Math.max(24, Math.min(56, Math.abs(nearestChildX - startX) / 2));
+        int spineX = rightSide ? startX + horizontalGap : startX - horizontalGap;
+
+        for (LayoutSnapshot.NodePlacement childPlacement : children) {
+            MindMapNode childNode = childPlacement.node();
+            Rectangle childBounds = childPlacement.copyBounds();
             int endX = rightSide ? childBounds.x : childBounds.x + childBounds.width;
-            int startY = parentBounds.y + parentBounds.height / 2;
             int endY = childBounds.y + childBounds.height / 2;
-            int controlOffset = Math.max(40, Math.abs(endX - startX) / 2);
 
-            CubicCurve2D curve = new CubicCurve2D.Float(
-                    startX,
-                    startY,
-                    rightSide ? startX + controlOffset : startX - controlOffset,
-                    startY,
-                    rightSide ? endX - controlOffset : endX + controlOffset,
-                    endY,
-                    endX,
-                    endY
-            );
-            graphics.setColor(withAlpha(resolveBranchColor(node), 200));
-            graphics.draw(curve);
+            graphics.setColor(withAlpha(resolveBranchColor(childNode), 200));
+            graphics.drawLine(startX, startY, spineX, startY);
+            graphics.drawLine(spineX, startY, spineX, endY);
+            graphics.drawLine(spineX, endY, endX, endY);
         }
     }
 
