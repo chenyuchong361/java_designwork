@@ -13,6 +13,7 @@ Changelog:
 - 2026-04-27 Codex: Added support for rendering custom node text, fill, and line colors. Original author: chenyuchong. Reason: allow per-node style customization while preserving selection feedback. Impact: backward compatible.
 - 2026-04-28 Codex: Simplified rendering to fill-only styling with border-only support. Original author: chenyuchong. Reason: remove unneeded text and line color customization while allowing no-fill nodes. Impact: backward compatible.
 - 2026-04-28 Codex: Matched node border colors to active fill colors when fills are present. Original author: chenyuchong. Reason: border styling is no longer independently configurable and should follow the fill color. Impact: backward compatible.
+- 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -55,7 +56,6 @@ public class MindMapCanvas extends JPanel {
     private static final Color NODE_FILL_COLOR = Color.WHITE;
     private static final Color NODE_LINE_COLOR = new Color(114, 132, 158);
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
-    private static final Color NODE_SHADOW_COLOR = new Color(0, 0, 0, 18);
     private static final Color SELECTED_HALO_COLOR = new Color(235, 141, 0, 180);
 
     private final MindMapLayoutEngine layoutEngine = new MindMapLayoutEngine();
@@ -253,16 +253,10 @@ public class MindMapCanvas extends JPanel {
             boolean transparentFill = node.isFillTransparent();
 
             RoundRectangle2D shape = new RoundRectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
-            RoundRectangle2D shadowShape = new RoundRectangle2D.Double(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 18, 18);
             RoundRectangle2D haloShape = new RoundRectangle2D.Double(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 22, 22);
             Color lineColor = transparentFill
                     ? (node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR)
                     : resolveFillColor(node);
-
-            if (!transparentFill) {
-                graphics.setColor(NODE_SHADOW_COLOR);
-                graphics.fill(shadowShape);
-            }
 
             if (selected) {
                 graphics.setColor(SELECTED_HALO_COLOR);
