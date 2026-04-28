@@ -1,9 +1,9 @@
 /*
 Script: MindMapCanvas.java
-Purpose: Render the mind map canvas and handle direct node interactions, including custom node styles.
+Purpose: Render the mind map canvas and handle direct node interactions, including fill-only styling.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-27
+Last Updated: 2026-04-28
 Dependencies: Java Swing, AWT, com.course.mindmap.layout, com.course.mindmap.model
 Usage: Instantiated by MainFrame as the central drawing surface for the application.
 
@@ -11,6 +11,7 @@ Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
 - 2026-04-27 Codex: Added node right-click context menu callbacks for canvas actions. Original author: chenyuchong. Reason: enable add child, add sibling, and delete actions directly from the drawing area. Impact: backward compatible.
 - 2026-04-27 Codex: Added support for rendering custom node text, fill, and line colors. Original author: chenyuchong. Reason: allow per-node style customization while preserving selection feedback. Impact: backward compatible.
+- 2026-04-28 Codex: Simplified rendering to fill-only styling with border-only support. Original author: chenyuchong. Reason: remove unneeded text and line color customization while allowing no-fill nodes. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -205,6 +206,7 @@ public class MindMapCanvas extends JPanel {
 
     private void drawConnections(Graphics2D graphics) {
         graphics.setStroke(new BasicStroke(2.0f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+        graphics.setColor(withAlpha(NODE_LINE_COLOR, 190));
 
         for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
             MindMapNode node = placement.node();
@@ -237,7 +239,6 @@ public class MindMapCanvas extends JPanel {
                     endX,
                     endY
             );
-            graphics.setColor(withAlpha(resolveLineColor(node), 190));
             graphics.draw(curve);
         }
     }
@@ -248,17 +249,17 @@ public class MindMapCanvas extends JPanel {
             MindMapNode node = placement.node();
             Rectangle bounds = placement.copyBounds();
             boolean selected = selectedNode != null && selectedNode.getId().equals(node.getId());
+            boolean transparentFill = node.isFillTransparent();
 
             RoundRectangle2D shape = new RoundRectangle2D.Double(bounds.x, bounds.y, bounds.width, bounds.height, 18, 18);
             RoundRectangle2D shadowShape = new RoundRectangle2D.Double(bounds.x + 3, bounds.y + 4, bounds.width, bounds.height, 18, 18);
             RoundRectangle2D haloShape = new RoundRectangle2D.Double(bounds.x - 3, bounds.y - 3, bounds.width + 6, bounds.height + 6, 22, 22);
+            Color lineColor = node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR;
 
-            Color fillColor = resolveFillColor(node);
-            Color lineColor = resolveLineColor(node);
-            Color textColor = resolveTextColor(node);
-
-            graphics.setColor(NODE_SHADOW_COLOR);
-            graphics.fill(shadowShape);
+            if (!transparentFill) {
+                graphics.setColor(NODE_SHADOW_COLOR);
+                graphics.fill(shadowShape);
+            }
 
             if (selected) {
                 graphics.setColor(SELECTED_HALO_COLOR);
@@ -266,13 +267,16 @@ public class MindMapCanvas extends JPanel {
                 graphics.draw(haloShape);
             }
 
-            graphics.setColor(fillColor);
-            graphics.fill(shape);
+            if (!transparentFill) {
+                graphics.setColor(resolveFillColor(node));
+                graphics.fill(shape);
+            }
+
             graphics.setColor(lineColor);
             graphics.setStroke(new BasicStroke(selected ? 2.8f : 1.8f));
             graphics.draw(shape);
 
-            graphics.setColor(textColor);
+            graphics.setColor(NODE_TEXT_COLOR);
             int textWidth = metrics.stringWidth(node.getText());
             int textX = bounds.x + (bounds.width - textWidth) / 2;
             int textY = bounds.y + (bounds.height - metrics.getHeight()) / 2 + metrics.getAscent();
@@ -320,28 +324,16 @@ public class MindMapCanvas extends JPanel {
         return new Dimension(width, height);
     }
 
-    private Color resolveTextColor(MindMapNode node) {
-        return parseColor(node.getTextColorHex(), NODE_TEXT_COLOR);
-    }
-
     private Color resolveFillColor(MindMapNode node) {
         Color fallback = node.isRoot() ? ROOT_FILL_COLOR : NODE_FILL_COLOR;
-        return parseColor(node.getFillColorHex(), fallback);
-    }
-
-    private Color resolveLineColor(MindMapNode node) {
-        Color fallback = node.isRoot() ? ROOT_LINE_COLOR : NODE_LINE_COLOR;
-        return parseColor(node.getLineColorHex(), fallback);
-    }
-
-    private Color parseColor(String colorHex, Color fallbackColor) {
-        if (colorHex == null || colorHex.isBlank()) {
-            return fallbackColor;
+        String fillColorHex = node.getFillColorHex();
+        if (fillColorHex == null || fillColorHex.isBlank()) {
+            return fallback;
         }
         try {
-            return Color.decode(colorHex);
+            return Color.decode(fillColorHex);
         } catch (NumberFormatException exception) {
-            return fallbackColor;
+            return fallback;
         }
     }
 
