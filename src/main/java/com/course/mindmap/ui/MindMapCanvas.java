@@ -16,6 +16,7 @@ Changelog:
 - 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
 - 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
 - 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
+- 2026-04-30 chenyuchong: Excluded transient selection highlighting from exported images. Original author: chenyuchong. Reason: exported mind map files should contain only diagram content, not editor state. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -174,7 +175,7 @@ public class MindMapCanvas extends JPanel {
         BufferedImage image = new BufferedImage(width, height, imageType);
         Graphics2D graphics = image.createGraphics();
         try {
-            paintScene(graphics, width, height);
+            paintScene(graphics, width, height, null);
         } finally {
             graphics.dispose();
         }
@@ -184,10 +185,10 @@ public class MindMapCanvas extends JPanel {
     @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
-        paintScene((Graphics2D) graphics, getWidth(), getHeight());
+        paintScene((Graphics2D) graphics, getWidth(), getHeight(), selectedNode);
     }
 
-    private void paintScene(Graphics2D graphics, int width, int height) {
+    private void paintScene(Graphics2D graphics, int width, int height, MindMapNode highlightedNode) {
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         graphics.setColor(Color.WHITE);
@@ -201,7 +202,7 @@ public class MindMapCanvas extends JPanel {
         try {
             translated.translate(offsetX, offsetY);
             drawConnections(translated);
-            drawNodes(translated);
+            drawNodes(translated, highlightedNode);
         } finally {
             translated.dispose();
         }
@@ -246,11 +247,11 @@ public class MindMapCanvas extends JPanel {
         }
     }
 
-    private void drawNodes(Graphics2D graphics) {
+    private void drawNodes(Graphics2D graphics, MindMapNode highlightedNode) {
         for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
             MindMapNode node = placement.node();
             Rectangle bounds = placement.copyBounds();
-            boolean selected = selectedNode != null && selectedNode.getId().equals(node.getId());
+            boolean selected = highlightedNode != null && highlightedNode.getId().equals(node.getId());
             boolean transparentFill = node.isFillTransparent();
             Color fillColor = resolveFillColor(node);
             Color borderColor = resolveBorderColor(node);

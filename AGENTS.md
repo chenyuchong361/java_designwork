@@ -6,9 +6,8 @@
 ## Collaborators
 
 - Codex
-- 陈宇冲
-- 陈宗波
-- 温文辉
+- chenyuchong
+
 
 ---
 
@@ -17,7 +16,7 @@
 ```text
 Script: <file name>
 Purpose: <what this script does>
-Author: <author name>
+Author: <chenyuchong>
 Created: <YYYY-MM-DD>
 Last Updated: <YYYY-MM-DD>
 Dependencies: <deps or None>
