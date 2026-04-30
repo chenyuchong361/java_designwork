@@ -9,9 +9,9 @@ Usage: Used by the document, UI, and file persistence layers to manage node data
 
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
-- 2026-04-27 Codex: Added per-node text, fill, and line color properties for customizable rendering. Original author: chenyuchong. Reason: support user-controlled node styling that can be saved and restored. Impact: backward compatible.
-- 2026-04-28 Codex: Reduced styling to fill-only state with no-fill support. Original author: chenyuchong. Reason: keep module styling focused on background fill while allowing border-only display. Impact: backward compatible.
-- 2026-04-28 Codex: Added node border, text, and branch style properties for the right-click property panel. Original author: chenyuchong. Reason: match modern mind map styling workflows with localized property editing. Impact: backward compatible.
+- 2026-04-27 陈宗波: Added per-node text, fill, and line color properties for customizable rendering. Original author: chenyuchong. Reason: support user-controlled node styling that can be saved and restored. Impact: backward compatible.
+- 2026-04-28 陈宗波: Reduced styling to fill-only state with no-fill support. Original author: chenyuchong. Reason: keep module styling focused on background fill while allowing border-only display. Impact: backward compatible.
+- 2026-04-28 陈宗波: Added node border, text, and branch style properties for the right-click property panel. Original author: chenyuchong. Reason: match modern mind map styling workflows with localized property editing. Impact: backward compatible.
 */
 package com.course.mindmap.model;
 

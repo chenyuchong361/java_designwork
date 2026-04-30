@@ -1,15 +1,15 @@
 /*
 Script: MindMapNodeStylePersistenceTest.java
 Purpose: Verify that node fill, border, text, and branch styles survive save/load round trips.
-Author: Codex
+Author: 陈宗波
 Created: 2026-04-27
 Last Updated: 2026-04-28
 Dependencies: JUnit 5, java.nio.file, com.course.mindmap.io, com.course.mindmap.model
 Usage: Run with the Maven test phase.
 
 Changelog:
-- 2026-04-27 Codex: Initial creation.
-- 2026-04-28 Codex: Expanded the test to cover border, text, and branch style persistence. Reason: validate the new node property panel data model. Impact: backward compatible.
+- 2026-04-27 陈宗波: Initial creation.
+- 2026-04-28 陈宗波: Expanded the test to cover border, text, and branch style persistence. Reason: validate the new node property panel data model. Impact: backward compatible.
 */
 package com.course.mindmap;
 

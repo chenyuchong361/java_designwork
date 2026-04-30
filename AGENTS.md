@@ -5,7 +5,6 @@
 
 ## Collaborators
 
-- Codex
 - 陈宇冲
 - 陈宗波
 - 温文辉
@@ -99,7 +98,7 @@ AI Agent 参与时必须：
 
 ## 3. Git Commit Rules
 
-feat：新增用户可感知功能                          
+feat：新增用户可感知功能
 add：新增脚本 / 模板 / 配置 / 辅助资源
 fix：修复缺陷
 refactor：重构实现，不改业务功能
