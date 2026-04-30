@@ -3,7 +3,7 @@ Script: MindMapCanvas.java
 Purpose: Render the mind map canvas and handle direct node interactions, including fill, border, text, and branch styling.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-28
+Last Updated: 2026-04-30
 Dependencies: Java Swing, AWT, com.course.mindmap.layout, com.course.mindmap.model
 Usage: Instantiated by MainFrame as the central drawing surface for the application.
 
@@ -16,6 +16,7 @@ Changelog:
 - 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
 - 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
 - 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
+- 2026-04-30 温文辉: Preserved blank-area deselection behavior and kept canvas callbacks aligned with tree synchronization. Original author: chenyuchong. Reason: stabilize task B selection flow across drawing and structure views. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
