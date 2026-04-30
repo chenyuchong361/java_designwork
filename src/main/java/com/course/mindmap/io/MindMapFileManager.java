@@ -9,9 +9,9 @@ Usage: Called by MainFrame when persisting or opening .dt mind map files.
 
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
-- 2026-04-27 Codex: Added persistence for node text, fill, and line colors. Original author: chenyuchong. Reason: preserve user-selected node styles across save and load operations. Impact: backward compatible.
-- 2026-04-28 Codex: Simplified persistence to fill-only styling with no-fill support. Original author: chenyuchong. Reason: match the reduced UI styling scope while preserving border-only nodes. Impact: backward compatible.
-- 2026-04-28 Codex: Extended persistence to border, text, and branch styles for the node property popup. Original author: chenyuchong. Reason: keep styling behavior consistent after saving and reopening mind maps. Impact: backward compatible.
+- 2026-04-27 陈宗波: Added persistence for node text, fill, and line colors. Original author: chenyuchong. Reason: preserve user-selected node styles across save and load operations. Impact: backward compatible.
+- 2026-04-28 陈宗波: Simplified persistence to fill-only styling with no-fill support. Original author: chenyuchong. Reason: match the reduced UI styling scope while preserving border-only nodes. Impact: backward compatible.
+- 2026-04-28 陈宗波: Extended persistence to border, text, and branch styles for the node property popup. Original author: chenyuchong. Reason: keep styling behavior consistent after saving and reopening mind maps. Impact: backward compatible.
 */
 package com.course.mindmap.io;
 
