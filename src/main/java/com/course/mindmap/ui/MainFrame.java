@@ -3,7 +3,7 @@ Script: MainFrame.java
 Purpose: Build the main application window and coordinate mind map editing, file actions, and node property editing.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-28
+Last Updated: 2026-04-30
 Dependencies: Java Swing, AWT, java.io.File, com.course.mindmap.io, com.course.mindmap.model
 Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interactions, and file operations.
 
@@ -16,6 +16,7 @@ Changelog:
 - 2026-04-28 Codex: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
 - 2026-04-28 Codex: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
 - 2026-04-28 Codex: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
+- 2026-04-30 温文辉: Added explicit deselection controls and tightened canvas/tree/property-panel state synchronization. Original author: chenyuchong. Reason: complete task B interaction flow so selection, cancellation, and structure updates stay consistent during demos. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -120,6 +121,7 @@ public class MainFrame extends JFrame {
     private final JButton addChildButton = new JButton("添加子节点");
     private final JButton addSiblingButton = new JButton("添加兄弟节点");
     private final JButton renameNodeButton = new JButton("重命名");
+    private final JButton clearSelectionButton = new JButton("取消选中");
     private final JButton deleteNodeButton = new JButton("删除节点");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
@@ -166,6 +168,7 @@ public class MainFrame extends JFrame {
         editMenu.add(createMenuItem("添加子节点", KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, 0), this::addChildNode));
         editMenu.add(createMenuItem("添加兄弟节点", KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.SHIFT_DOWN_MASK), this::addSiblingNode));
         editMenu.add(createMenuItem("重命名节点", KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), this::renameSelectedNode));
+        editMenu.add(createMenuItem("取消选中", KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), this::clearSelection));
         editMenu.add(createMenuItem("删除节点", KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), this::deleteSelectedNode));
 
         JMenu helpMenu = new JMenu("帮助");
@@ -205,6 +208,10 @@ public class MainFrame extends JFrame {
         renameNodeButton.addActionListener(event -> renameSelectedNode());
         toolBar.add(renameNodeButton);
 
+        clearSelectionButton.setToolTipText("取消当前节点选中状态");
+        clearSelectionButton.addActionListener(event -> clearSelection());
+        toolBar.add(clearSelectionButton);
+
         deleteNodeButton.setToolTipText("删除当前选中节点及其所有子节点");
         deleteNodeButton.addActionListener(event -> deleteSelectedNode());
         toolBar.add(deleteNodeButton);
@@ -213,6 +220,10 @@ public class MainFrame extends JFrame {
         toolBar.add(new JLabel("布局方式: "));
         layoutModeBox.setMaximumSize(new Dimension(150, 28));
         toolBar.add(layoutModeBox);
+        toolBar.add(Box.createHorizontalGlue());
+
+        JButton helpButton = createToolbarButton("使用说明", "查看当前演示与操作说明", this::showHelp);
+        toolBar.add(helpButton);
 
         return toolBar;
     }
@@ -233,8 +244,10 @@ public class MainFrame extends JFrame {
         outlinePanel.add(treeScrollPane, BorderLayout.CENTER);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, canvasScrollPane, outlinePanel);
-        splitPane.setResizeWeight(0.8);
-        splitPane.setDividerLocation(1040);
+        splitPane.setResizeWeight(0.78);
+        splitPane.setDividerLocation(1020);
+        splitPane.setContinuousLayout(true);
+        splitPane.setOneTouchExpandable(true);
         return splitPane;
     }
 
@@ -455,6 +468,15 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(parent);
     }
 
+    private void clearSelection() {
+        if (selectedNode == null) {
+            return;
+        }
+        activeColorTarget = null;
+        hideNodePropertyPopup();
+        setSelectedNode(null);
+    }
+
     private void applySelectedNodeFillColor(Color selectedColor) {
         selectedNode.setFillColorHex(toColorHex(selectedColor));
         activeColorTarget = null;
@@ -588,14 +610,20 @@ public class MainFrame extends JFrame {
         reopenNodePropertyPopup();
     }
 
+    private void hideNodePropertyPopup() {
+        if (nodePropertyPopup != null) {
+            nodePropertyPopup.setVisible(false);
+            nodePropertyPopup = null;
+        }
+        nodePropertyPopupPoint = null;
+    }
+
     private void reopenNodePropertyPopup() {
         if (selectedNode == null || nodePropertyPopupPoint == null) {
             return;
         }
 
-        if (nodePropertyPopup != null) {
-            nodePropertyPopup.setVisible(false);
-        }
+        hideNodePropertyPopup();
 
         nodePropertyPopup = new JPopupMenu();
         nodePropertyPopup.setBorder(BorderFactory.createLineBorder(new Color(214, 214, 214)));
@@ -970,6 +998,12 @@ public class MainFrame extends JFrame {
 
     private void setSelectedNode(MindMapNode node) {
         selectedNode = node;
+        if (selectedNode == null) {
+            activeColorTarget = null;
+            hideNodePropertyPopup();
+        } else if (nodePropertyPopupPoint != null && nodePropertyPopup != null && nodePropertyPopup.isVisible()) {
+            reopenNodePropertyPopup();
+        }
         syncingSelection = true;
         try {
             canvas.setSelectedNode(node, true);
@@ -995,6 +1029,7 @@ public class MainFrame extends JFrame {
         addChildButton.setEnabled(selectedNode != null);
         addSiblingButton.setEnabled(selectedNode != null && !selectedNode.isRoot());
         renameNodeButton.setEnabled(selectedNode != null);
+        clearSelectionButton.setEnabled(selectedNode != null);
         deleteNodeButton.setEnabled(selectedNode != null && !selectedNode.isRoot());
 
         String fileText = currentFile == null ? "未保存" : currentFile.getName();
@@ -1079,12 +1114,13 @@ public class MainFrame extends JFrame {
     private void showHelp() {
         String helpText = """
                 1. 新建后会自动生成一个中心节点。
-                2. 单击节点可选中，双击节点可快速重命名。
+                2. 单击节点可选中，双击节点可快速重命名，按 Esc 或点击“取消选中”可清除当前选中。
                 3. 选中中心节点可以添加子节点和切换布局方式。
                 4. 选中普通节点可以添加子节点、兄弟节点，或删除该节点。
-                5. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
-                6. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
-                7. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
+                5. 左侧结构显示区与绘图区会同步选中与滚动定位，适合演示和排查层级关系。
+                6. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
+                7. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
+                8. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
                 """;
         JOptionPane.showMessageDialog(this, helpText, "使用说明", JOptionPane.INFORMATION_MESSAGE);
     }
