@@ -17,6 +17,7 @@ Changelog:
 - 2026-04-28 Codex: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
 - 2026-04-28 Codex: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
 - 2026-04-30 温文辉: Added explicit deselection controls and tightened canvas/tree/property-panel state synchronization. Original author: chenyuchong. Reason: complete task B interaction flow so selection, cancellation, and structure updates stay consistent during demos. Impact: backward compatible.
+- 2026-04-30 温文辉: Added tree-area deselection and double-click rename support with clearer status guidance. Original author: chenyuchong. Reason: make the structure panel participate more naturally in task B demonstration and editing workflows. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -270,6 +271,19 @@ public class MainFrame extends JFrame {
             DefaultMutableTreeNode treeNode = (DefaultMutableTreeNode) outlineTree.getLastSelectedPathComponent();
             MindMapNode node = treeNode == null ? null : (MindMapNode) treeNode.getUserObject();
             setSelectedNode(node);
+        });
+        outlineTree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                TreePath treePath = outlineTree.getPathForLocation(event.getX(), event.getY());
+                if (treePath == null && SwingUtilities.isLeftMouseButton(event)) {
+                    clearSelection();
+                    return;
+                }
+                if (treePath != null && SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
+                    renameSelectedNode();
+                }
+            }
         });
 
         layoutModeBox.addActionListener(event -> {
@@ -1036,7 +1050,8 @@ public class MainFrame extends JFrame {
         String selectionText = selectedNode == null ? "未选中节点" : "当前节点: " + selectedNode.getText();
         int totalNodes = document == null ? 0 : document.getRoot().countNodes();
         String dirtyText = dirty ? " | 有未保存修改" : "";
-        statusLabel.setText(selectionText + " | 节点数: " + totalNodes + " | 文件: " + fileText + dirtyText);
+        String hintText = selectedNode == null ? " | 提示: 可在画布或结构区选择节点" : " | 提示: 双击可重命名";
+        statusLabel.setText(selectionText + " | 节点数: " + totalNodes + " | 文件: " + fileText + dirtyText + hintText);
 
         setTitle((dirty ? "* " : "") + documentTitle + " - 思维导图绘制工具");
     }
@@ -1116,8 +1131,8 @@ public class MainFrame extends JFrame {
                 1. 新建后会自动生成一个中心节点。
                 2. 单击节点可选中，双击节点可快速重命名，按 Esc 或点击“取消选中”可清除当前选中。
                 3. 选中中心节点可以添加子节点和切换布局方式。
-                4. 选中普通节点可以添加子节点、兄弟节点，或删除该节点。
-                5. 左侧结构显示区与绘图区会同步选中与滚动定位，适合演示和排查层级关系。
+                4. 选中普通节点可以添加子节点、兄弟节点，或删除节点；在结构显示区双击节点也可直接重命名。
+                5. 左侧结构显示区与绘图区会同步选中与滚动定位，适合演示和排查层级关系；单击结构区空白处可取消选中。
                 6. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
                 7. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
                 8. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
