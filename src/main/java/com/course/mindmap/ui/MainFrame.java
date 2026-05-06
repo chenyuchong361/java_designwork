@@ -18,6 +18,7 @@ Changelog:
 - 2026-04-28 Codex: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
 - 2026-04-30 温文辉: Added explicit deselection controls and tightened canvas/tree/property-panel state synchronization. Original author: chenyuchong. Reason: complete task B interaction flow so selection, cancellation, and structure updates stay consistent during demos. Impact: backward compatible.
 - 2026-04-30 温文辉: Added tree-area deselection and double-click rename support with clearer status guidance. Original author: chenyuchong. Reason: make the structure panel participate more naturally in task B demonstration and editing workflows. Impact: backward compatible.
+- 2026-04-30 温文辉: Added quick actions inside the structure panel for expansion, root focus, and selection clearing. Original author: chenyuchong. Reason: make the structure display area more complete and presentation-friendly for task B. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -242,6 +243,7 @@ public class MainFrame extends JFrame {
         JPanel outlinePanel = new JPanel(new BorderLayout());
         outlinePanel.setBorder(BorderFactory.createTitledBorder("结构显示区"));
         outlinePanel.setPreferredSize(new Dimension(300, 0));
+        outlinePanel.add(createOutlineToolbar(), BorderLayout.NORTH);
         outlinePanel.add(treeScrollPane, BorderLayout.CENTER);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, canvasScrollPane, outlinePanel);
@@ -256,6 +258,30 @@ public class MainFrame extends JFrame {
         JPanel panel = new JPanel(new BorderLayout());
         statusLabel.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
         panel.add(statusLabel, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createOutlineToolbar() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
+        panel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+
+        JButton expandButton = new JButton("展开全部");
+        expandButton.addActionListener(event -> expandAllRows());
+        panel.add(expandButton);
+
+        JButton rootButton = new JButton("定位中心");
+        rootButton.addActionListener(event -> {
+            if (document == null) {
+                return;
+            }
+            setSelectedNode(document.getRoot());
+        });
+        panel.add(rootButton);
+
+        JButton clearButton = new JButton("清空选择");
+        clearButton.addActionListener(event -> clearSelection());
+        panel.add(clearButton);
+
         return panel;
     }
 
@@ -1133,9 +1159,10 @@ public class MainFrame extends JFrame {
                 3. 选中中心节点可以添加子节点和切换布局方式。
                 4. 选中普通节点可以添加子节点、兄弟节点，或删除节点；在结构显示区双击节点也可直接重命名。
                 5. 左侧结构显示区与绘图区会同步选中与滚动定位，适合演示和排查层级关系；单击结构区空白处可取消选中。
-                6. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
-                7. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
-                8. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
+                6. 结构显示区提供展开全部、定位中心、清空选择等快捷操作，便于课堂演示。
+                7. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
+                8. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
+                9. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
                 """;
         JOptionPane.showMessageDialog(this, helpText, "使用说明", JOptionPane.INFORMATION_MESSAGE);
     }
