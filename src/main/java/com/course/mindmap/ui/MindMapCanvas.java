@@ -3,19 +3,20 @@ Script: MindMapCanvas.java
 Purpose: Render the mind map canvas and handle direct node interactions, including fill, border, text, and branch styling.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-28
+Last Updated: 2026-04-30
 Dependencies: Java Swing, AWT, com.course.mindmap.layout, com.course.mindmap.model
 Usage: Instantiated by MainFrame as the central drawing surface for the application.
 
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
-- 2026-04-27 陈宗波: Added node right-click context menu callbacks for canvas actions. Original author: chenyuchong. Reason: enable add child, add sibling, and delete actions directly from the drawing area. Impact: backward compatible.
-- 2026-04-27 陈宗波: Added support for rendering custom node text, fill, and line colors. Original author: chenyuchong. Reason: allow per-node style customization while preserving selection feedback. Impact: backward compatible.
-- 2026-04-28 陈宗波: Simplified rendering to fill-only styling with border-only support. Original author: chenyuchong. Reason: remove unneeded text and line color customization while allowing no-fill nodes. Impact: backward compatible.
-- 2026-04-28 陈宗波: Matched node border colors to active fill colors when fills are present. Original author: chenyuchong. Reason: border styling is no longer independently configurable and should follow the fill color. Impact: backward compatible.
-- 2026-04-28 陈宗波: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
-- 2026-04-28 陈宗波: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
-- 2026-04-28 陈宗波: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
+- 2026-04-27 Codex: Added node right-click context menu callbacks for canvas actions. Original author: chenyuchong. Reason: enable add child, add sibling, and delete actions directly from the drawing area. Impact: backward compatible.
+- 2026-04-27 Codex: Added support for rendering custom node text, fill, and line colors. Original author: chenyuchong. Reason: allow per-node style customization while preserving selection feedback. Impact: backward compatible.
+- 2026-04-28 Codex: Simplified rendering to fill-only styling with border-only support. Original author: chenyuchong. Reason: remove unneeded text and line color customization while allowing no-fill nodes. Impact: backward compatible.
+- 2026-04-28 Codex: Matched node border colors to active fill colors when fills are present. Original author: chenyuchong. Reason: border styling is no longer independently configurable and should follow the fill color. Impact: backward compatible.
+- 2026-04-28 Codex: Removed node drop shadows for filled nodes. Original author: chenyuchong. Reason: fill styling should render as a flat shape without extra shadow artifacts. Impact: backward compatible.
+- 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
+- 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
+- 2026-04-30 温文辉: Preserved blank-area deselection behavior and kept canvas callbacks aligned with tree synchronization. Original author: chenyuchong. Reason: stabilize task B selection flow across drawing and structure views. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 

@@ -3,19 +3,22 @@ Script: MainFrame.java
 Purpose: Build the main application window and coordinate mind map editing, file actions, and node property editing.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-28
+Last Updated: 2026-04-30
 Dependencies: Java Swing, AWT, java.io.File, com.course.mindmap.io, com.course.mindmap.model
 Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interactions, and file operations.
 
 Changelog:
 - 2026-03-14 chenyuchong: Initial creation.
-- 2026-04-27 陈宗波: Added canvas node context menu actions and synchronized them with existing edit commands. Original author: chenyuchong. Reason: allow right-click editing directly on nodes in the drawing area. Impact: backward compatible.
-- 2026-04-27 陈宗波: Added per-node text, fill, and line color editing actions with style persistence support. Original author: chenyuchong. Reason: allow users to customize module appearance directly in the application. Impact: backward compatible.
-- 2026-04-28 陈宗波: Simplified styling controls to fill-only actions with a no-fill option. Original author: chenyuchong. Reason: match the requested module appearance workflow while keeping default borders. Impact: backward compatible.
-- 2026-04-28 陈宗波: Replaced the simple fill menu with a right-click node property panel for fill, border, text, and branch styles. Original author: chenyuchong. Reason: align the interaction model with mainstream mind map tools. Impact: backward compatible.
-- 2026-04-28 陈宗波: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
-- 2026-04-28 陈宗波: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
-- 2026-04-28 陈宗波: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
+- 2026-04-27 Codex: Added canvas node context menu actions and synchronized them with existing edit commands. Original author: chenyuchong. Reason: allow right-click editing directly on nodes in the drawing area. Impact: backward compatible.
+- 2026-04-27 Codex: Added per-node text, fill, and line color editing actions with style persistence support. Original author: chenyuchong. Reason: allow users to customize module appearance directly in the application. Impact: backward compatible.
+- 2026-04-28 Codex: Simplified styling controls to fill-only actions with a no-fill option. Original author: chenyuchong. Reason: match the requested module appearance workflow while keeping default borders. Impact: backward compatible.
+- 2026-04-28 Codex: Replaced the simple fill menu with a right-click node property panel for fill, border, text, and branch styles. Original author: chenyuchong. Reason: align the interaction model with mainstream mind map tools. Impact: backward compatible.
+- 2026-04-28 Codex: Fixed the node property popup sizing so the panel is visible on right-click. Original author: chenyuchong. Reason: the popup content was accidentally given a zero-height preferred size. Impact: backward compatible.
+- 2026-04-28 Codex: Reworked swatch rendering and color picking to use a compact palette popup with accurate live colors. Original author: chenyuchong. Reason: make the property panel reflect current colors and provide a cleaner color-selection experience. Impact: backward compatible.
+- 2026-04-28 Codex: Moved palette selection into the node property popup so color picks apply immediately and return to the same property level. Original author: chenyuchong. Reason: fix missed color application and preserve the expected property-panel workflow. Impact: backward compatible.
+- 2026-04-30 温文辉: Added explicit deselection controls and tightened canvas/tree/property-panel state synchronization. Original author: chenyuchong. Reason: complete task B interaction flow so selection, cancellation, and structure updates stay consistent during demos. Impact: backward compatible.
+- 2026-04-30 温文辉: Added tree-area deselection and double-click rename support with clearer status guidance. Original author: chenyuchong. Reason: make the structure panel participate more naturally in task B demonstration and editing workflows. Impact: backward compatible.
+- 2026-04-30 温文辉: Added quick actions inside the structure panel for expansion, root focus, and selection clearing. Original author: chenyuchong. Reason: make the structure display area more complete and presentation-friendly for task B. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -120,6 +123,7 @@ public class MainFrame extends JFrame {
     private final JButton addChildButton = new JButton("添加子节点");
     private final JButton addSiblingButton = new JButton("添加兄弟节点");
     private final JButton renameNodeButton = new JButton("重命名");
+    private final JButton clearSelectionButton = new JButton("取消选中");
     private final JButton deleteNodeButton = new JButton("删除节点");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
@@ -166,6 +170,7 @@ public class MainFrame extends JFrame {
         editMenu.add(createMenuItem("添加子节点", KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, 0), this::addChildNode));
         editMenu.add(createMenuItem("添加兄弟节点", KeyStroke.getKeyStroke(KeyEvent.VK_INSERT, InputEvent.SHIFT_DOWN_MASK), this::addSiblingNode));
         editMenu.add(createMenuItem("重命名节点", KeyStroke.getKeyStroke(KeyEvent.VK_F2, 0), this::renameSelectedNode));
+        editMenu.add(createMenuItem("取消选中", KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), this::clearSelection));
         editMenu.add(createMenuItem("删除节点", KeyStroke.getKeyStroke(KeyEvent.VK_DELETE, 0), this::deleteSelectedNode));
 
         JMenu helpMenu = new JMenu("帮助");
@@ -205,6 +210,10 @@ public class MainFrame extends JFrame {
         renameNodeButton.addActionListener(event -> renameSelectedNode());
         toolBar.add(renameNodeButton);
 
+        clearSelectionButton.setToolTipText("取消当前节点选中状态");
+        clearSelectionButton.addActionListener(event -> clearSelection());
+        toolBar.add(clearSelectionButton);
+
         deleteNodeButton.setToolTipText("删除当前选中节点及其所有子节点");
         deleteNodeButton.addActionListener(event -> deleteSelectedNode());
         toolBar.add(deleteNodeButton);
@@ -213,6 +222,10 @@ public class MainFrame extends JFrame {
         toolBar.add(new JLabel("布局方式: "));
         layoutModeBox.setMaximumSize(new Dimension(150, 28));
         toolBar.add(layoutModeBox);
+        toolBar.add(Box.createHorizontalGlue());
+
+        JButton helpButton = createToolbarButton("使用说明", "查看当前演示与操作说明", this::showHelp);
+        toolBar.add(helpButton);
 
         return toolBar;
     }
@@ -230,11 +243,14 @@ public class MainFrame extends JFrame {
         JPanel outlinePanel = new JPanel(new BorderLayout());
         outlinePanel.setBorder(BorderFactory.createTitledBorder("结构显示区"));
         outlinePanel.setPreferredSize(new Dimension(300, 0));
+        outlinePanel.add(createOutlineToolbar(), BorderLayout.NORTH);
         outlinePanel.add(treeScrollPane, BorderLayout.CENTER);
 
         JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, canvasScrollPane, outlinePanel);
-        splitPane.setResizeWeight(0.8);
-        splitPane.setDividerLocation(1040);
+        splitPane.setResizeWeight(0.78);
+        splitPane.setDividerLocation(1020);
+        splitPane.setContinuousLayout(true);
+        splitPane.setOneTouchExpandable(true);
         return splitPane;
     }
 
@@ -242,6 +258,30 @@ public class MainFrame extends JFrame {
         JPanel panel = new JPanel(new BorderLayout());
         statusLabel.setBorder(BorderFactory.createEmptyBorder(6, 10, 6, 10));
         panel.add(statusLabel, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createOutlineToolbar() {
+        JPanel panel = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
+        panel.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+
+        JButton expandButton = new JButton("展开全部");
+        expandButton.addActionListener(event -> expandAllRows());
+        panel.add(expandButton);
+
+        JButton rootButton = new JButton("定位中心");
+        rootButton.addActionListener(event -> {
+            if (document == null) {
+                return;
+            }
+            setSelectedNode(document.getRoot());
+        });
+        panel.add(rootButton);
+
+        JButton clearButton = new JButton("清空选择");
+        clearButton.addActionListener(event -> clearSelection());
+        panel.add(clearButton);
+
         return panel;
     }
 
@@ -257,6 +297,19 @@ public class MainFrame extends JFrame {
             DefaultMutableTreeNode treeNode = (DefaultMutableTreeNode) outlineTree.getLastSelectedPathComponent();
             MindMapNode node = treeNode == null ? null : (MindMapNode) treeNode.getUserObject();
             setSelectedNode(node);
+        });
+        outlineTree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent event) {
+                TreePath treePath = outlineTree.getPathForLocation(event.getX(), event.getY());
+                if (treePath == null && SwingUtilities.isLeftMouseButton(event)) {
+                    clearSelection();
+                    return;
+                }
+                if (treePath != null && SwingUtilities.isLeftMouseButton(event) && event.getClickCount() == 2) {
+                    renameSelectedNode();
+                }
+            }
         });
 
         layoutModeBox.addActionListener(event -> {
@@ -455,6 +508,15 @@ public class MainFrame extends JFrame {
         markDocumentDirtyAndRefresh(parent);
     }
 
+    private void clearSelection() {
+        if (selectedNode == null) {
+            return;
+        }
+        activeColorTarget = null;
+        hideNodePropertyPopup();
+        setSelectedNode(null);
+    }
+
     private void applySelectedNodeFillColor(Color selectedColor) {
         selectedNode.setFillColorHex(toColorHex(selectedColor));
         activeColorTarget = null;
@@ -588,14 +650,20 @@ public class MainFrame extends JFrame {
         reopenNodePropertyPopup();
     }
 
+    private void hideNodePropertyPopup() {
+        if (nodePropertyPopup != null) {
+            nodePropertyPopup.setVisible(false);
+            nodePropertyPopup = null;
+        }
+        nodePropertyPopupPoint = null;
+    }
+
     private void reopenNodePropertyPopup() {
         if (selectedNode == null || nodePropertyPopupPoint == null) {
             return;
         }
 
-        if (nodePropertyPopup != null) {
-            nodePropertyPopup.setVisible(false);
-        }
+        hideNodePropertyPopup();
 
         nodePropertyPopup = new JPopupMenu();
         nodePropertyPopup.setBorder(BorderFactory.createLineBorder(new Color(214, 214, 214)));
@@ -970,6 +1038,12 @@ public class MainFrame extends JFrame {
 
     private void setSelectedNode(MindMapNode node) {
         selectedNode = node;
+        if (selectedNode == null) {
+            activeColorTarget = null;
+            hideNodePropertyPopup();
+        } else if (nodePropertyPopupPoint != null && nodePropertyPopup != null && nodePropertyPopup.isVisible()) {
+            reopenNodePropertyPopup();
+        }
         syncingSelection = true;
         try {
             canvas.setSelectedNode(node, true);
@@ -995,13 +1069,15 @@ public class MainFrame extends JFrame {
         addChildButton.setEnabled(selectedNode != null);
         addSiblingButton.setEnabled(selectedNode != null && !selectedNode.isRoot());
         renameNodeButton.setEnabled(selectedNode != null);
+        clearSelectionButton.setEnabled(selectedNode != null);
         deleteNodeButton.setEnabled(selectedNode != null && !selectedNode.isRoot());
 
         String fileText = currentFile == null ? "未保存" : currentFile.getName();
         String selectionText = selectedNode == null ? "未选中节点" : "当前节点: " + selectedNode.getText();
         int totalNodes = document == null ? 0 : document.getRoot().countNodes();
         String dirtyText = dirty ? " | 有未保存修改" : "";
-        statusLabel.setText(selectionText + " | 节点数: " + totalNodes + " | 文件: " + fileText + dirtyText);
+        String hintText = selectedNode == null ? " | 提示: 可在画布或结构区选择节点" : " | 提示: 双击可重命名";
+        statusLabel.setText(selectionText + " | 节点数: " + totalNodes + " | 文件: " + fileText + dirtyText + hintText);
 
         setTitle((dirty ? "* " : "") + documentTitle + " - 思维导图绘制工具");
     }
@@ -1079,12 +1155,14 @@ public class MainFrame extends JFrame {
     private void showHelp() {
         String helpText = """
                 1. 新建后会自动生成一个中心节点。
-                2. 单击节点可选中，双击节点可快速重命名。
+                2. 单击节点可选中，双击节点可快速重命名，按 Esc 或点击“取消选中”可清除当前选中。
                 3. 选中中心节点可以添加子节点和切换布局方式。
-                4. 选中普通节点可以添加子节点、兄弟节点，或删除该节点。
-                5. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
-                6. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
-                7. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
+                4. 选中普通节点可以添加子节点、兄弟节点，或删除节点；在结构显示区双击节点也可直接重命名。
+                5. 左侧结构显示区与绘图区会同步选中与滚动定位，适合演示和排查层级关系；单击结构区空白处可取消选中。
+                6. 结构显示区提供展开全部、定位中心、清空选择等快捷操作，便于课堂演示。
+                7. 右击节点会弹出属性框，可设置填充、边框、文本和分支颜色。
+                8. 文本属性支持字号、颜色和加粗；分支颜色未设置时会自动跟随当前填充色，无填充时回退为黑色。
+                9. 保存文件使用自定义 .dt 扩展名，导出支持 PNG 和 JPG。
                 """;
         JOptionPane.showMessageDialog(this, helpText, "使用说明", JOptionPane.INFORMATION_MESSAGE);
     }
