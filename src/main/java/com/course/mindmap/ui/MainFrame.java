@@ -3,7 +3,7 @@ Script: MainFrame.java
 Purpose: Build the main application window and coordinate mind map editing, file actions, and node property editing.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-30
+Last Updated: 2026-05-09
 Dependencies: Java Swing, AWT, java.io.File, com.course.mindmap.io, com.course.mindmap.model
 Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interactions, and file operations.
 
@@ -19,6 +19,7 @@ Changelog:
 - 2026-04-30 温文辉: Added explicit deselection controls and tightened canvas/tree/property-panel state synchronization. Original author: chenyuchong. Reason: complete task B interaction flow so selection, cancellation, and structure updates stay consistent during demos. Impact: backward compatible.
 - 2026-04-30 温文辉: Added tree-area deselection and double-click rename support with clearer status guidance. Original author: chenyuchong. Reason: make the structure panel participate more naturally in task B demonstration and editing workflows. Impact: backward compatible.
 - 2026-04-30 温文辉: Added quick actions inside the structure panel for expansion, root focus, and selection clearing. Original author: chenyuchong. Reason: make the structure display area more complete and presentation-friendly for task B. Impact: backward compatible.
+- 2026-05-09 Codex: Fixed the right-click property popup reopen flow so fill and other palette actions keep their anchor position. Original author: chenyuchong. Reason: the recent popup hide/reset logic cleared the stored location before the palette panel could reopen, which broke color application workflows. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -663,12 +664,14 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        Point popupPoint = new Point(nodePropertyPopupPoint);
         hideNodePropertyPopup();
+        nodePropertyPopupPoint = popupPoint;
 
         nodePropertyPopup = new JPopupMenu();
         nodePropertyPopup.setBorder(BorderFactory.createLineBorder(new Color(214, 214, 214)));
         nodePropertyPopup.add(buildNodePropertyPanel(nodePropertyPopup));
-        nodePropertyPopup.show(canvas, nodePropertyPopupPoint.x, nodePropertyPopupPoint.y);
+        nodePropertyPopup.show(canvas, popupPoint.x, popupPoint.y);
     }
 
     private JPanel buildNodePropertyPanel(JPopupMenu popupMenu) {
