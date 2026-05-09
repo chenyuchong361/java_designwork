@@ -20,6 +20,7 @@ Changelog:
 - 2026-04-30 温文辉: Added tree-area deselection and double-click rename support with clearer status guidance. Original author: chenyuchong. Reason: make the structure panel participate more naturally in task B demonstration and editing workflows. Impact: backward compatible.
 - 2026-04-30 温文辉: Added quick actions inside the structure panel for expansion, root focus, and selection clearing. Original author: chenyuchong. Reason: make the structure display area more complete and presentation-friendly for task B. Impact: backward compatible.
 - 2026-05-09 Codex: Fixed the right-click property popup reopen flow so fill and other palette actions keep their anchor position. Original author: chenyuchong. Reason: the recent popup hide/reset logic cleared the stored location before the palette panel could reopen, which broke color application workflows. Impact: backward compatible.
+- 2026-05-09 陈宗波: Reset newly created child and sibling nodes to white fill, gray border, and black branch colors. Original author: chenyuchong. Reason: avoid inheriting confusing blue/no-fill defaults during node creation and keep the default visual style consistent. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -446,6 +447,7 @@ public class MainFrame extends JFrame {
         }
 
         MindMapNode child = selectedNode.addChild(text);
+        applyDefaultChildNodeStyle(child);
         markDocumentDirtyAndRefresh(child);
     }
 
@@ -464,7 +466,18 @@ public class MainFrame extends JFrame {
         }
 
         MindMapNode sibling = selectedNode.addSiblingAfter(text);
+        applyDefaultChildNodeStyle(sibling);
         markDocumentDirtyAndRefresh(sibling);
+    }
+
+    private void applyDefaultChildNodeStyle(MindMapNode node) {
+        if (node == null || node.isRoot()) {
+            return;
+        }
+
+        node.setFillColorHex(toColorHex(NODE_FILL_COLOR));
+        node.setBorderColorHex(toColorHex(NODE_BORDER_COLOR));
+        node.setBranchColorHex(toColorHex(BRANCH_FALLBACK_COLOR));
     }
 
     private void renameSelectedNode() {
