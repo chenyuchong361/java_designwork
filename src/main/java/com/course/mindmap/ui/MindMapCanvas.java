@@ -20,6 +20,8 @@ Changelog:
 - 2026-05-10 Codex: Added direct node dragging with synchronized branch rerouting and position-change callbacks. Original author: chenyuchong. Reason: let users reposition modules freely on the canvas while keeping visual links up to date. Impact: backward compatible.
 - 2026-05-10 Codex: Restricted dragging to the center node only. Original author: chenyuchong. Reason: child-node free dragging produced unstable branch geometry and was replaced with root-only repositioning. Impact: backward compatible.
 - 2026-05-10 Codex: Added centered viewport focusing for selected nodes. Original author: chenyuchong. Reason: keep the root node visible in the middle of the canvas when a document is first opened or recentered. Impact: backward compatible.
+- 2026-05-10 Codex: Deferred viewport centering until the real visible extent is ready. Original author: chenyuchong. Reason: early centering used the full virtual canvas size instead of the actual scroll viewport, which left the root node parked in the lower-right area on startup. Impact: backward compatible.
+- 2026-05-10 Codex: Replaced the fixed virtual origin with viewport-based canvas anchoring. Original author: chenyuchong. Reason: the old large translation constants always pushed the root node into the lower-right area on startup instead of drawing it at the visible center. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -57,6 +59,10 @@ import javax.swing.SwingUtilities;
 
 public class MindMapCanvas extends JPanel {
     private static final int CANVAS_MARGIN = 80;
+    private static final int CENTERING_MAX_ATTEMPTS = 8;
+    private static final int CENTERING_TOLERANCE = 2;
+    private static final int DEFAULT_VIEWPORT_WIDTH = 1200;
+    private static final int DEFAULT_VIEWPORT_HEIGHT = 760;
     private static final int MIN_WIDTH = 110;
     private static final int MIN_HEIGHT = 38;
     private static final Font BASE_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 14);
@@ -67,9 +73,6 @@ public class MindMapCanvas extends JPanel {
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
     private static final Color SELECTED_HALO_COLOR = new Color(235, 141, 0, 180);
-    private static final int VIEW_ORIGIN_X = 2400;
-    private static final int VIEW_ORIGIN_Y = 1800;
-
     private final MindMapLayoutEngine layoutEngine = new MindMapLayoutEngine();
     private MindMapDocument document;
     private LayoutSnapshot snapshot = new LayoutSnapshot(Map.of());
@@ -196,39 +199,72 @@ public class MindMapCanvas extends JPanel {
     }
 
     public void centerNodeInView(MindMapNode node) {
+        centerNodeInView(node, 0);
+    }
+
+    private void centerNodeInView(MindMapNode node, int attempt) {
         if (node == null) {
             return;
         }
 
-        LayoutSnapshot.NodePlacement placement = snapshot.getPlacement(node.getId());
-        if (placement == null) {
-            return;
-        }
-
-        Rectangle viewBounds = toViewBounds(placement.copyBounds());
         Runnable centerTask = () -> {
+            LayoutSnapshot.NodePlacement placement = snapshot.getPlacement(node.getId());
+            if (placement == null) {
+                return;
+            }
+
+            Rectangle viewBounds = toViewBounds(placement.copyBounds());
             JViewport viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
             if (viewport == null) {
                 scrollRectToVisible(viewBounds);
                 return;
             }
 
+            Dimension extent = viewport.getExtentSize();
+            if (attempt < CENTERING_MAX_ATTEMPTS && shouldWaitForViewport(extent)) {
+                SwingUtilities.invokeLater(() -> centerNodeInView(node, attempt + 1));
+                return;
+            }
+
             Rectangle visibleRect = viewport.getViewRect();
-            int targetX = viewBounds.x + viewBounds.width / 2 - visibleRect.width / 2;
-            int targetY = viewBounds.y + viewBounds.height / 2 - visibleRect.height / 2;
-            int maxX = Math.max(0, getWidth() - visibleRect.width);
-            int maxY = Math.max(0, getHeight() - visibleRect.height);
+            int targetX = viewBounds.x + viewBounds.width / 2 - extent.width / 2;
+            int targetY = viewBounds.y + viewBounds.height / 2 - extent.height / 2;
+            int maxX = Math.max(0, getWidth() - extent.width);
+            int maxY = Math.max(0, getHeight() - extent.height);
             viewport.setViewPosition(new Point(
                     Math.max(0, Math.min(targetX, maxX)),
                     Math.max(0, Math.min(targetY, maxY))
             ));
+
+            if (attempt < CENTERING_MAX_ATTEMPTS && !isCentered(viewBounds, viewport.getViewRect())) {
+                SwingUtilities.invokeLater(() -> centerNodeInView(node, attempt + 1));
+            }
         };
 
-        if (isShowing()) {
+        if (SwingUtilities.isEventDispatchThread()) {
+            centerTask.run();
+        } else if (isShowing()) {
             SwingUtilities.invokeLater(centerTask);
         } else {
             centerTask.run();
         }
+    }
+
+    private boolean shouldWaitForViewport(Dimension extent) {
+        return extent.width <= 0
+                || extent.height <= 0
+                || (getWidth() > 0 && getHeight() > 0
+                && extent.width >= getWidth()
+                && extent.height >= getHeight());
+    }
+
+    private boolean isCentered(Rectangle viewBounds, Rectangle visibleRect) {
+        int nodeCenterX = viewBounds.x + viewBounds.width / 2;
+        int nodeCenterY = viewBounds.y + viewBounds.height / 2;
+        int viewCenterX = visibleRect.x + visibleRect.width / 2;
+        int viewCenterY = visibleRect.y + visibleRect.height / 2;
+        return Math.abs(nodeCenterX - viewCenterX) <= CENTERING_TOLERANCE
+                && Math.abs(nodeCenterY - viewCenterY) <= CENTERING_TOLERANCE;
     }
 
     public void refreshLayout() {
@@ -243,13 +279,45 @@ public class MindMapCanvas extends JPanel {
         snapshot = layoutEngine.layout(document, this::measureNode);
 
         Rectangle bounds = snapshot.getContentBounds();
-        offsetX = Math.max(VIEW_ORIGIN_X, CANVAS_MARGIN - bounds.x);
-        offsetY = Math.max(VIEW_ORIGIN_Y, CANVAS_MARGIN - bounds.y);
-        int width = Math.max(900, bounds.x + bounds.width + offsetX + CANVAS_MARGIN);
-        int height = Math.max(640, bounds.y + bounds.height + offsetY + CANVAS_MARGIN);
+        Dimension viewportExtent = resolveViewportExtent();
+        int horizontalAnchor = Math.max(CANVAS_MARGIN, viewportExtent.width / 2);
+        int verticalAnchor = Math.max(CANVAS_MARGIN, viewportExtent.height / 2);
+
+        offsetX = Math.max(horizontalAnchor, CANVAS_MARGIN - bounds.x);
+        offsetY = Math.max(verticalAnchor, CANVAS_MARGIN - bounds.y);
+
+        int width = Math.max(viewportExtent.width, bounds.x + bounds.width + offsetX + horizontalAnchor);
+        int height = Math.max(viewportExtent.height, bounds.y + bounds.height + offsetY + verticalAnchor);
         setPreferredSize(new Dimension(width, height));
         revalidate();
         repaint();
+    }
+
+    private Dimension resolveViewportExtent() {
+        JViewport viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+        if (viewport != null) {
+            Dimension extent = viewport.getExtentSize();
+            if (extent.width > 0 && extent.height > 0) {
+                return extent;
+            }
+        }
+
+        Rectangle visibleRect = getVisibleRect();
+        if (visibleRect.width > 0 && visibleRect.height > 0) {
+            return visibleRect.getSize();
+        }
+
+        Dimension parentSize = getParent() == null ? null : getParent().getSize();
+        if (parentSize != null && parentSize.width > 0 && parentSize.height > 0) {
+            return parentSize;
+        }
+
+        Dimension currentSize = getSize();
+        if (currentSize.width > 0 && currentSize.height > 0) {
+            return currentSize;
+        }
+
+        return new Dimension(DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT);
     }
 
     public void exportToImage(File file, String format) throws IOException {

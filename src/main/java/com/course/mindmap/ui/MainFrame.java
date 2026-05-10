@@ -25,6 +25,7 @@ Changelog:
 - 2026-05-10 Codex: Wired canvas drag events into document dirty tracking and updated usage guidance for free node repositioning. Original author: chenyuchong. Reason: keep save-state feedback accurate after users move modules on the canvas. Impact: backward compatible.
 - 2026-05-10 Codex: Centered the root node after initial document loads and explicit root refocus actions. Original author: chenyuchong. Reason: the canvas opened from the top-left of a large virtual surface, which made the center node appear in the lower-right corner on first render. Impact: backward compatible.
 - 2026-05-10 Codex: Deferred the initial root-centering step until the window is shown. Original author: chenyuchong. Reason: first-render recentering could run before the viewport size stabilized, leaving the root node in the lower-right corner on startup. Impact: backward compatible.
+- 2026-05-10 Codex: Decoupled root focusing from generic scroll-to-fit selection. Original author: chenyuchong. Reason: the generic selection path scrolled the root node only into the viewport corner before the explicit centering step could finish, which left startup positioning stuck in the lower-right area. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -330,7 +331,8 @@ public class MainFrame extends JFrame {
         addWindowListener(new WindowAdapter() {
             @Override
             public void windowOpened(WindowEvent event) {
-                focusRootNode();
+                canvas.refreshLayout();
+                SwingUtilities.invokeLater(MainFrame.this::focusRootNode);
             }
 
             @Override
@@ -1023,8 +1025,13 @@ public class MainFrame extends JFrame {
         syncingLayoutBox = true;
         layoutModeBox.setSelectedItem(document.getLayoutMode());
         syncingLayoutBox = false;
-        setSelectedNode(preferredSelection == null ? document.getRoot() : preferredSelection);
+        MindMapNode targetSelection = preferredSelection == null ? document.getRoot() : preferredSelection;
+        boolean focusRoot = targetSelection != null && targetSelection.isRoot();
+        setSelectedNode(targetSelection, !focusRoot);
         canvas.refreshLayout();
+        if (focusRoot && isShowing()) {
+            SwingUtilities.invokeLater(this::focusRootNode);
+        }
         updateWindowState();
     }
 
@@ -1071,6 +1078,10 @@ public class MainFrame extends JFrame {
     }
 
     private void setSelectedNode(MindMapNode node) {
+        setSelectedNode(node, true);
+    }
+
+    private void setSelectedNode(MindMapNode node, boolean scrollCanvas) {
         selectedNode = node;
         if (selectedNode == null) {
             activeColorTarget = null;
@@ -1080,7 +1091,7 @@ public class MainFrame extends JFrame {
         }
         syncingSelection = true;
         try {
-            canvas.setSelectedNode(node, true);
+            canvas.setSelectedNode(node, scrollCanvas);
             if (node == null) {
                 outlineTree.clearSelection();
             } else {
@@ -1247,7 +1258,7 @@ public class MainFrame extends JFrame {
         if (document == null || document.getRoot() == null) {
             return;
         }
-        setSelectedNode(document.getRoot());
+        setSelectedNode(document.getRoot(), false);
         canvas.centerNodeInView(document.getRoot());
     }
 
