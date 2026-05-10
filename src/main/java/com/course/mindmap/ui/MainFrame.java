@@ -26,6 +26,7 @@ Changelog:
 - 2026-05-10 Codex: Centered the root node after initial document loads and explicit root refocus actions. Original author: chenyuchong. Reason: the canvas opened from the top-left of a large virtual surface, which made the center node appear in the lower-right corner on first render. Impact: backward compatible.
 - 2026-05-10 Codex: Deferred the initial root-centering step until the window is shown. Original author: chenyuchong. Reason: first-render recentering could run before the viewport size stabilized, leaving the root node in the lower-right corner on startup. Impact: backward compatible.
 - 2026-05-10 Codex: Decoupled root focusing from generic scroll-to-fit selection. Original author: chenyuchong. Reason: the generic selection path scrolled the root node only into the viewport corner before the explicit centering step could finish, which left startup positioning stuck in the lower-right area. Impact: backward compatible.
+- 2026-05-10 Codex: Added Ctrl+Z undo support for node edits, style changes, layout switching, and root dragging. Original author: chenyuchong. Reason: let users roll back the previous editing step without manually reconstructing the prior state. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -52,6 +53,8 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.image.BufferedImage;
 import java.io.File;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.Locale;
@@ -81,7 +84,9 @@ import javax.swing.JSpinner;
 import javax.swing.JSplitPane;
 import javax.swing.JToolBar;
 import javax.swing.JTree;
+import javax.swing.JComponent;
 import javax.swing.KeyStroke;
+import javax.swing.AbstractAction;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
@@ -109,6 +114,7 @@ public class MainFrame extends JFrame {
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
     private static final Dimension COLOR_BUTTON_SIZE = new Dimension(34, 22);
     private static final Dimension PALETTE_TILE_SIZE = new Dimension(28, 28);
+    private static final int MAX_UNDO_HISTORY = 50;
     private static final Color[] PALETTE_COLORS = {
             new Color(255, 255, 255), new Color(245, 245, 245), new Color(224, 224, 224), new Color(189, 189, 189),
             new Color(117, 117, 117), new Color(66, 66, 66), new Color(33, 33, 33), new Color(0, 0, 0),
@@ -134,6 +140,7 @@ public class MainFrame extends JFrame {
     private final JButton deleteNodeButton = new JButton("删除节点");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
+    private final Deque<UndoSnapshot> undoStack = new ArrayDeque<>();
 
     private MindMapDocument document;
     private MindMapNode selectedNode;
@@ -144,6 +151,18 @@ public class MainFrame extends JFrame {
     private JPopupMenu nodePropertyPopup;
     private Point nodePropertyPopupPoint;
     private ColorTarget activeColorTarget;
+    private String pendingDragUndoNodeId;
+    private boolean undoInProgress;
+
+    private static final class UndoSnapshot {
+        private final MindMapDocument documentSnapshot;
+        private final String selectedNodeId;
+
+        private UndoSnapshot(MindMapDocument documentSnapshot, String selectedNodeId) {
+            this.documentSnapshot = documentSnapshot;
+            this.selectedNodeId = selectedNodeId;
+        }
+    }
 
     public MainFrame() {
         super("思维导图绘制工具");
@@ -295,8 +314,9 @@ public class MainFrame extends JFrame {
     private void wireEvents() {
         canvas.setSelectionListener(this::setSelectedNode);
         canvas.setNodeActivationListener(node -> renameSelectedNode());
-        canvas.setNodePositionChangeListener(node -> markDocumentDirty());
+        canvas.setNodePositionChangeListener(this::handleNodePositionChange);
         canvas.setNodeContextMenuListener((node, point) -> showCanvasNodePropertyPopup(point));
+        bindUndoShortcut();
 
         outlineTree.addTreeSelectionListener(event -> {
             if (syncingSelection) {
@@ -342,6 +362,17 @@ public class MainFrame extends JFrame {
         });
     }
 
+    private void bindUndoShortcut() {
+        KeyStroke undoKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_Z, InputEvent.CTRL_DOWN_MASK);
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(undoKeyStroke, "undo-last-action");
+        getRootPane().getActionMap().put("undo-last-action", new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                undoLastAction();
+            }
+        });
+    }
+
     private JButton createToolbarButton(String text, String toolTip, Runnable action) {
         JButton button = new JButton(text);
         button.setFocusable(false);
@@ -367,6 +398,8 @@ public class MainFrame extends JFrame {
         document = MindMapDocument.createBlank();
         currentFile = null;
         dirty = false;
+        undoStack.clear();
+        pendingDragUndoNodeId = null;
         refreshDocumentView(document.getRoot());
     }
 
@@ -385,6 +418,8 @@ public class MainFrame extends JFrame {
             document = fileManager.load(chosenFile);
             currentFile = chosenFile;
             dirty = false;
+            undoStack.clear();
+            pendingDragUndoNodeId = null;
             refreshDocumentView(document.getRoot());
         } catch (Exception exception) {
             showError("打开失败", exception);
@@ -466,6 +501,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         MindMapNode child = selectedNode.addChild(text);
         applyDefaultChildNodeStyle(child);
         markDocumentDirtyAndRefresh(child);
@@ -485,6 +521,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         MindMapNode sibling = selectedNode.addSiblingAfter(text);
         applyDefaultChildNodeStyle(sibling);
         markDocumentDirtyAndRefresh(sibling);
@@ -510,6 +547,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.setText(text);
         if (selectedNode.isRoot()) {
             document.setTitle(text);
@@ -537,6 +575,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         MindMapNode parent = selectedNode.getParent();
         parent.removeChild(selectedNode);
         markDocumentDirtyAndRefresh(parent);
@@ -552,6 +591,7 @@ public class MainFrame extends JFrame {
     }
 
     private void applySelectedNodeFillColor(Color selectedColor) {
+        pushUndoSnapshot();
         selectedNode.setFillColorHex(toColorHex(selectedColor));
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -566,6 +606,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.setFillTransparent(true);
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -580,6 +621,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.clearCustomFillStyle();
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -587,6 +629,7 @@ public class MainFrame extends JFrame {
     }
 
     private void applySelectedNodeBorderColor(Color selectedColor) {
+        pushUndoSnapshot();
         selectedNode.setBorderColorHex(toColorHex(selectedColor));
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -601,6 +644,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.clearCustomBorderStyle();
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -608,6 +652,7 @@ public class MainFrame extends JFrame {
     }
 
     private void applySelectedNodeTextColor(Color selectedColor) {
+        pushUndoSnapshot();
         selectedNode.setTextColorHex(toColorHex(selectedColor));
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -622,6 +667,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.clearCustomTextStyle();
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -636,6 +682,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.setFontSize(fontSize);
         markDocumentDirtyAndRefresh(selectedNode);
         reopenNodePropertyPopup();
@@ -649,12 +696,14 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.setBold(bold);
         markDocumentDirtyAndRefresh(selectedNode);
         reopenNodePropertyPopup();
     }
 
     private void applySelectedNodeBranchColor(Color selectedColor) {
+        pushUndoSnapshot();
         selectedNode.setBranchColorHex(toColorHex(selectedColor));
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -669,6 +718,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         selectedNode.clearCustomBranchStyle();
         activeColorTarget = null;
         markDocumentDirtyAndRefresh(selectedNode);
@@ -1013,6 +1063,7 @@ public class MainFrame extends JFrame {
             return;
         }
 
+        pushUndoSnapshot();
         document.setLayoutMode(layoutMode);
         dirty = true;
         canvas.refreshLayout();
@@ -1252,6 +1303,56 @@ public class MainFrame extends JFrame {
             dirty = true;
         }
         updateWindowState();
+    }
+
+    private void handleNodePositionChange(MindMapNode node) {
+        if (node == null || undoInProgress) {
+            return;
+        }
+        if (!Objects.equals(pendingDragUndoNodeId, node.getId())) {
+            pushUndoSnapshot();
+            pendingDragUndoNodeId = node.getId();
+        }
+        markDocumentDirty();
+    }
+
+    private void pushUndoSnapshot() {
+        if (document == null || undoInProgress) {
+            return;
+        }
+        undoStack.push(new UndoSnapshot(
+                document.copy(),
+                selectedNode == null ? null : selectedNode.getId()
+        ));
+        while (undoStack.size() > MAX_UNDO_HISTORY) {
+            undoStack.removeLast();
+        }
+        pendingDragUndoNodeId = null;
+    }
+
+    private void undoLastAction() {
+        if (document == null) {
+            return;
+        }
+        if (undoStack.isEmpty()) {
+            statusLabel.setText("当前没有可撤销的操作。");
+            updateWindowState();
+            return;
+        }
+
+        UndoSnapshot snapshot = undoStack.pop();
+        undoInProgress = true;
+        try {
+            document.restoreFrom(snapshot.documentSnapshot);
+            pendingDragUndoNodeId = null;
+            dirty = true;
+            MindMapNode restoredSelection = snapshot.selectedNodeId == null
+                    ? document.getRoot()
+                    : document.findNodeById(snapshot.selectedNodeId);
+            refreshDocumentView(restoredSelection == null ? document.getRoot() : restoredSelection);
+        } finally {
+            undoInProgress = false;
+        }
     }
 
     private void focusRootNode() {
