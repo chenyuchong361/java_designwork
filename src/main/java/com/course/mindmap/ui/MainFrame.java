@@ -24,6 +24,7 @@ Changelog:
 - 2026-05-10 Codex: Added a confirmation dialog before exporting over an existing image file. Original author: chenyuchong. Reason: prevent silent overwrites when the chosen export path already contains a file with the same name. Impact: backward compatible.
 - 2026-05-10 Codex: Wired canvas drag events into document dirty tracking and updated usage guidance for free node repositioning. Original author: chenyuchong. Reason: keep save-state feedback accurate after users move modules on the canvas. Impact: backward compatible.
 - 2026-05-10 Codex: Centered the root node after initial document loads and explicit root refocus actions. Original author: chenyuchong. Reason: the canvas opened from the top-left of a large virtual surface, which made the center node appear in the lower-right corner on first render. Impact: backward compatible.
+- 2026-05-10 Codex: Deferred the initial root-centering step until the window is shown. Original author: chenyuchong. Reason: first-render recentering could run before the viewport size stabilized, leaving the root node in the lower-right corner on startup. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -327,6 +328,11 @@ public class MainFrame extends JFrame {
         });
 
         addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowOpened(WindowEvent event) {
+                focusRootNode();
+            }
+
             @Override
             public void windowClosing(WindowEvent event) {
                 closeWindow();
@@ -1019,9 +1025,6 @@ public class MainFrame extends JFrame {
         syncingLayoutBox = false;
         setSelectedNode(preferredSelection == null ? document.getRoot() : preferredSelection);
         canvas.refreshLayout();
-        if (preferredSelection != null && preferredSelection.isRoot()) {
-            SwingUtilities.invokeLater(this::focusRootNode);
-        }
         updateWindowState();
     }
 
