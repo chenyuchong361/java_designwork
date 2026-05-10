@@ -3,7 +3,7 @@ Script: MainFrame.java
 Purpose: Build the main application window and coordinate mind map editing, file actions, and node property editing.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-05-09
+Last Updated: 2026-05-10
 Dependencies: Java Swing, AWT, java.io.File, com.course.mindmap.io, com.course.mindmap.model
 Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interactions, and file operations.
 
@@ -21,6 +21,7 @@ Changelog:
 - 2026-04-30 温文辉: Added quick actions inside the structure panel for expansion, root focus, and selection clearing. Original author: chenyuchong. Reason: make the structure display area more complete and presentation-friendly for task B. Impact: backward compatible.
 - 2026-05-09 Codex: Fixed the right-click property popup reopen flow so fill and other palette actions keep their anchor position. Original author: chenyuchong. Reason: the recent popup hide/reset logic cleared the stored location before the palette panel could reopen, which broke color application workflows. Impact: backward compatible.
 - 2026-05-09 陈宗波: Reset newly created child and sibling nodes to blue fill, blue border, and black branch colors. Original author: chenyuchong. Reason: keep newly added nodes visually distinct and ensure default branches stay readable on the white canvas. Impact: backward compatible.
+- 2026-05-10 Codex: Added a confirmation dialog before exporting over an existing image file. Original author: chenyuchong. Reason: prevent silent overwrites when the chosen export path already contains a file with the same name. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -420,19 +421,27 @@ public class MainFrame extends JFrame {
         chooser.setFileFilter(pngFilter);
         chooser.setSelectedFile(new File(defaultFileName() + ".png"));
 
-        if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
-            return;
-        }
+        while (true) {
+            if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+                return;
+            }
 
-        FileFilter selectedFilter = chooser.getFileFilter();
-        String format = selectedFilter == jpgFilter ? "jpg" : "png";
-        File targetFile = ensureExtension(chooser.getSelectedFile(), format);
+            FileFilter selectedFilter = chooser.getFileFilter();
+            String format = selectedFilter == jpgFilter ? "jpg" : "png";
+            File targetFile = ensureExtension(chooser.getSelectedFile(), format);
+            chooser.setSelectedFile(targetFile);
+            if (!confirmOverwrite(targetFile, "该位置已经存在同名图片，是否覆盖？")) {
+                continue;
+            }
 
-        try {
-            canvas.exportToImage(targetFile, format);
-            statusLabel.setText("已导出图片: " + targetFile.getAbsolutePath());
-        } catch (Exception exception) {
-            showError("导出失败", exception);
+            try {
+                canvas.exportToImage(targetFile, format);
+                statusLabel.setText("已导出图片: " + targetFile.getAbsolutePath());
+                return;
+            } catch (Exception exception) {
+                showError("导出失败", exception);
+                return;
+            }
         }
     }
 
@@ -1134,6 +1143,21 @@ public class MainFrame extends JFrame {
             return file;
         }
         return new File(file.getParentFile(), file.getName() + normalizedExtension);
+    }
+
+    private boolean confirmOverwrite(File file, String message) {
+        if (file == null || !file.exists()) {
+            return true;
+        }
+
+        int option = JOptionPane.showConfirmDialog(
+                this,
+                message + "\n" + file.getAbsolutePath(),
+                "确认覆盖",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        return option == JOptionPane.YES_OPTION;
     }
 
     private String defaultFileName() {
