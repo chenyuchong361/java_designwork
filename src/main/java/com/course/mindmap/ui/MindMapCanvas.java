@@ -3,7 +3,7 @@ Script: MindMapCanvas.java
 Purpose: Render the mind map canvas and handle direct node interactions, including fill, border, text, and branch styling.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-30
+Last Updated: 2026-05-10
 Dependencies: Java Swing, AWT, com.course.mindmap.layout, com.course.mindmap.model
 Usage: Instantiated by MainFrame as the central drawing surface for the application.
 
@@ -17,6 +17,8 @@ Changelog:
 - 2026-04-28 Codex: Added border, text, and branch style rendering with auto-fallback rules. Original author: chenyuchong. Reason: support property-panel-based mind map styling similar to mainstream tools. Impact: backward compatible.
 - 2026-04-28 Codex: Updated automatic border and branch colors to follow the node's effective fill color. Original author: chenyuchong. Reason: keep automatic styling aligned with the visible node color state. Impact: backward compatible.
 - 2026-04-30 温文辉: Preserved blank-area deselection behavior and kept canvas callbacks aligned with tree synchronization. Original author: chenyuchong. Reason: stabilize task B selection flow across drawing and structure views. Impact: backward compatible.
+- 2026-05-10 Codex: Added direct node dragging with synchronized branch rerouting and position-change callbacks. Original author: chenyuchong. Reason: let users reposition modules freely on the canvas while keeping visual links up to date. Impact: backward compatible.
+- 2026-05-10 Codex: Restricted dragging to the center node only. Original author: chenyuchong. Reason: child-node free dragging produced unstable branch geometry and was replaced with root-only repositioning. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -41,6 +43,8 @@ import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.BiConsumer;
@@ -61,6 +65,8 @@ public class MindMapCanvas extends JPanel {
     private static final Color NODE_TEXT_COLOR = new Color(33, 43, 54);
     private static final Color BRANCH_FALLBACK_COLOR = Color.BLACK;
     private static final Color SELECTED_HALO_COLOR = new Color(235, 141, 0, 180);
+    private static final int VIEW_ORIGIN_X = 2400;
+    private static final int VIEW_ORIGIN_Y = 1800;
 
     private final MindMapLayoutEngine layoutEngine = new MindMapLayoutEngine();
     private MindMapDocument document;
@@ -70,10 +76,15 @@ public class MindMapCanvas extends JPanel {
     };
     private Consumer<MindMapNode> nodeActivationListener = node -> {
     };
+    private Consumer<MindMapNode> nodePositionChangeListener = node -> {
+    };
     private BiConsumer<MindMapNode, Point> nodeContextMenuListener = (node, point) -> {
     };
     private int offsetX = CANVAS_MARGIN;
     private int offsetY = CANVAS_MARGIN;
+    private MindMapNode draggedNode;
+    private Point lastDragPoint;
+    private boolean draggingNode;
 
     public MindMapCanvas() {
         setBackground(Color.WHITE);
@@ -96,15 +107,53 @@ public class MindMapCanvas extends JPanel {
 
             @Override
             public void mousePressed(MouseEvent event) {
+                if (SwingUtilities.isLeftMouseButton(event)) {
+                    MindMapNode candidateNode = findNodeAt(event.getPoint());
+                    draggedNode = candidateNode != null && candidateNode.isRoot() ? candidateNode : null;
+                    lastDragPoint = draggedNode == null ? null : event.getPoint();
+                    draggingNode = false;
+                    if (draggedNode != null && !Objects.equals(selectedNode, draggedNode)) {
+                        setSelectedNode(draggedNode, false);
+                        selectionListener.accept(draggedNode);
+                    }
+                }
                 maybeShowNodeContextMenu(event);
             }
 
             @Override
             public void mouseReleased(MouseEvent event) {
+                if (SwingUtilities.isLeftMouseButton(event)) {
+                    draggingNode = false;
+                    draggedNode = null;
+                    lastDragPoint = null;
+                }
                 maybeShowNodeContextMenu(event);
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent event) {
+                if ((event.getModifiersEx() & MouseEvent.BUTTON1_DOWN_MASK) == 0
+                        || draggedNode == null
+                        || lastDragPoint == null) {
+                    return;
+                }
+
+                Point currentPoint = event.getPoint();
+                int deltaX = currentPoint.x - lastDragPoint.x;
+                int deltaY = currentPoint.y - lastDragPoint.y;
+                if (deltaX == 0 && deltaY == 0) {
+                    return;
+                }
+
+                draggedNode.translateManualOffset(deltaX, deltaY);
+                lastDragPoint = currentPoint;
+                draggingNode = true;
+                refreshLayout();
+                nodePositionChangeListener.accept(draggedNode);
             }
         };
         addMouseListener(mouseAdapter);
+        addMouseMotionListener(mouseAdapter);
     }
 
     public void setSelectionListener(Consumer<MindMapNode> selectionListener) {
@@ -115,6 +164,11 @@ public class MindMapCanvas extends JPanel {
     public void setNodeActivationListener(Consumer<MindMapNode> nodeActivationListener) {
         this.nodeActivationListener = nodeActivationListener == null ? node -> {
         } : nodeActivationListener;
+    }
+
+    public void setNodePositionChangeListener(Consumer<MindMapNode> nodePositionChangeListener) {
+        this.nodePositionChangeListener = nodePositionChangeListener == null ? node -> {
+        } : nodePositionChangeListener;
     }
 
     public void setNodeContextMenuListener(BiConsumer<MindMapNode, Point> nodeContextMenuListener) {
@@ -151,10 +205,10 @@ public class MindMapCanvas extends JPanel {
         snapshot = layoutEngine.layout(document, this::measureNode);
 
         Rectangle bounds = snapshot.getContentBounds();
-        offsetX = CANVAS_MARGIN - bounds.x;
-        offsetY = CANVAS_MARGIN - bounds.y;
-        int width = Math.max(900, bounds.width + CANVAS_MARGIN * 2);
-        int height = Math.max(640, bounds.height + CANVAS_MARGIN * 2);
+        offsetX = Math.max(VIEW_ORIGIN_X, CANVAS_MARGIN - bounds.x);
+        offsetY = Math.max(VIEW_ORIGIN_Y, CANVAS_MARGIN - bounds.y);
+        int width = Math.max(900, bounds.x + bounds.width + offsetX + CANVAS_MARGIN);
+        int height = Math.max(640, bounds.y + bounds.height + offsetY + CANVAS_MARGIN);
         setPreferredSize(new Dimension(width, height));
         revalidate();
         repaint();
@@ -168,6 +222,8 @@ public class MindMapCanvas extends JPanel {
         Rectangle bounds = snapshot.getContentBounds();
         int width = Math.max(1, bounds.width + CANVAS_MARGIN * 2);
         int height = Math.max(1, bounds.height + CANVAS_MARGIN * 2);
+        int exportOffsetX = CANVAS_MARGIN - bounds.x;
+        int exportOffsetY = CANVAS_MARGIN - bounds.y;
         int imageType = "png".equalsIgnoreCase(format)
                 ? BufferedImage.TYPE_INT_ARGB
                 : BufferedImage.TYPE_INT_RGB;
@@ -175,7 +231,7 @@ public class MindMapCanvas extends JPanel {
         BufferedImage image = new BufferedImage(width, height, imageType);
         Graphics2D graphics = image.createGraphics();
         try {
-            paintScene(graphics, width, height);
+            paintScene(graphics, width, height, exportOffsetX, exportOffsetY);
         } finally {
             graphics.dispose();
         }
@@ -185,10 +241,10 @@ public class MindMapCanvas extends JPanel {
     @Override
     protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
-        paintScene((Graphics2D) graphics, getWidth(), getHeight());
+        paintScene((Graphics2D) graphics, getWidth(), getHeight(), offsetX, offsetY);
     }
 
-    private void paintScene(Graphics2D graphics, int width, int height) {
+    private void paintScene(Graphics2D graphics, int width, int height, int translateX, int translateY) {
         graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
         graphics.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         graphics.setColor(Color.WHITE);
@@ -200,7 +256,7 @@ public class MindMapCanvas extends JPanel {
 
         Graphics2D translated = (Graphics2D) graphics.create();
         try {
-            translated.translate(offsetX, offsetY);
+            translated.translate(translateX, translateY);
             drawConnections(translated);
             drawNodes(translated);
         } finally {
@@ -288,7 +344,9 @@ public class MindMapCanvas extends JPanel {
 
     private MindMapNode findNodeAt(Point point) {
         Point translated = new Point(point.x - offsetX, point.y - offsetY);
-        for (LayoutSnapshot.NodePlacement placement : snapshot.getPlacements().values()) {
+        List<LayoutSnapshot.NodePlacement> placements = new ArrayList<>(snapshot.getPlacements().values());
+        for (int index = placements.size() - 1; index >= 0; index--) {
+            LayoutSnapshot.NodePlacement placement = placements.get(index);
             if (placement.bounds().contains(translated)) {
                 return placement.node();
             }

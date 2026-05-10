@@ -1,3 +1,17 @@
+/*
+Script: MindMapLayoutEngine.java
+Purpose: Compute automatic node placement and blend it with user-adjusted manual offsets.
+Author: chenyuchong
+Created: 2026-03-14
+Last Updated: 2026-05-10
+Dependencies: java.awt, java.util, com.course.mindmap.model
+Usage: Invoked by MindMapCanvas to create the current placement snapshot for rendering and export.
+
+Changelog:
+- 2026-03-14 chenyuchong: Initial creation.
+- 2026-05-10 Codex: Applied persisted manual node offsets on top of automatic layout positions. Original author: chenyuchong. Reason: keep branch routing aligned when users drag modules away from the default layout. Impact: backward compatible.
+- 2026-05-10 Codex: Limited manual offset application to the center node. Original author: chenyuchong. Reason: prevent existing child offsets from distorting the automatic branch layout. Impact: backward compatible.
+*/
 package com.course.mindmap.layout;
 
 import com.course.mindmap.model.LayoutMode;
@@ -33,6 +47,7 @@ public class MindMapLayoutEngine {
                 rootSize.width,
                 rootSize.height
         );
+        rootBounds.translate(root.getManualOffsetX(), root.getManualOffsetY());
         placements.put(root.getId(), new LayoutSnapshot.NodePlacement(root, rootBounds));
 
         List<MindMapNode> rootChildren = root.getChildren();
@@ -131,6 +146,9 @@ public class MindMapLayoutEngine {
                 ? parentBounds.x + parentBounds.width + HORIZONTAL_GAP
                 : parentBounds.x - HORIZONTAL_GAP - size.width;
         Rectangle bounds = new Rectangle(x, centerY - size.height / 2, size.width, size.height);
+        if (node.isRoot()) {
+            bounds.translate(node.getManualOffsetX(), node.getManualOffsetY());
+        }
         placements.put(node.getId(), new LayoutSnapshot.NodePlacement(node, bounds));
         layoutChildGroup(bounds, node.getChildren(), side, sizeProvider, subtreeHeights, placements);
     }

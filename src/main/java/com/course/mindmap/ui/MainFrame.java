@@ -22,6 +22,7 @@ Changelog:
 - 2026-05-09 Codex: Fixed the right-click property popup reopen flow so fill and other palette actions keep their anchor position. Original author: chenyuchong. Reason: the recent popup hide/reset logic cleared the stored location before the palette panel could reopen, which broke color application workflows. Impact: backward compatible.
 - 2026-05-09 陈宗波: Reset newly created child and sibling nodes to blue fill, blue border, and black branch colors. Original author: chenyuchong. Reason: keep newly added nodes visually distinct and ensure default branches stay readable on the white canvas. Impact: backward compatible.
 - 2026-05-10 Codex: Added a confirmation dialog before exporting over an existing image file. Original author: chenyuchong. Reason: prevent silent overwrites when the chosen export path already contains a file with the same name. Impact: backward compatible.
+- 2026-05-10 Codex: Wired canvas drag events into document dirty tracking and updated usage guidance for free node repositioning. Original author: chenyuchong. Reason: keep save-state feedback accurate after users move modules on the canvas. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -291,6 +292,7 @@ public class MainFrame extends JFrame {
     private void wireEvents() {
         canvas.setSelectionListener(this::setSelectedNode);
         canvas.setNodeActivationListener(node -> renameSelectedNode());
+        canvas.setNodePositionChangeListener(node -> markDocumentDirty());
         canvas.setNodeContextMenuListener((node, point) -> showCanvasNodePropertyPopup(point));
 
         outlineTree.addTreeSelectionListener(event -> {
@@ -1225,6 +1227,13 @@ public class MainFrame extends JFrame {
     private void markDocumentDirtyAndRefresh(MindMapNode preferredSelection) {
         dirty = true;
         refreshDocumentView(preferredSelection);
+    }
+
+    private void markDocumentDirty() {
+        if (!dirty) {
+            dirty = true;
+        }
+        updateWindowState();
     }
 
     private Color defaultFillColor(MindMapNode node) {

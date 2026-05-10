@@ -3,7 +3,7 @@ Script: MindMapFileManager.java
 Purpose: Save and load mind map documents, including node fill, border, text, and branch styles.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-28
+Last Updated: 2026-05-10
 Dependencies: Java XML APIs, com.course.mindmap.model
 Usage: Called by MainFrame when persisting or opening .dt mind map files.
 
@@ -12,6 +12,7 @@ Changelog:
 - 2026-04-27 陈宗波: Added persistence for node text, fill, and line colors. Original author: chenyuchong. Reason: preserve user-selected node styles across save and load operations. Impact: backward compatible.
 - 2026-04-28 陈宗波: Simplified persistence to fill-only styling with no-fill support. Original author: chenyuchong. Reason: match the reduced UI styling scope while preserving border-only nodes. Impact: backward compatible.
 - 2026-04-28 陈宗波: Extended persistence to border, text, and branch styles for the node property popup. Original author: chenyuchong. Reason: keep styling behavior consistent after saving and reopening mind maps. Impact: backward compatible.
+- 2026-05-10 Codex: Added persistence for per-node manual position offsets. Original author: chenyuchong. Reason: retain user-dragged module positions after saving and reopening a mind map. Impact: backward compatible.
 */
 package com.course.mindmap.io;
 
@@ -89,6 +90,12 @@ public class MindMapFileManager {
             element.setAttribute("bold", "true");
         }
         writeOptionalAttribute(element, "branch-color", node.getBranchColorHex());
+        if (node.getManualOffsetX() != 0) {
+            element.setAttribute("offset-x", String.valueOf(node.getManualOffsetX()));
+        }
+        if (node.getManualOffsetY() != 0) {
+            element.setAttribute("offset-y", String.valueOf(node.getManualOffsetY()));
+        }
 
         for (MindMapNode child : node.getChildren()) {
             element.appendChild(writeNode(xmlDocument, child));
@@ -116,6 +123,9 @@ public class MindMapFileManager {
         }
         node.setBold(Boolean.parseBoolean(readOptionalAttribute(element, "bold")));
         node.setBranchColorHex(readOptionalAttribute(element, "branch-color"));
+        Integer offsetX = readOptionalIntegerAttribute(element, "offset-x");
+        Integer offsetY = readOptionalIntegerAttribute(element, "offset-y");
+        node.setManualOffset(offsetX == null ? 0 : offsetX, offsetY == null ? 0 : offsetY);
 
         NodeList childNodes = element.getChildNodes();
         for (int i = 0; i < childNodes.getLength(); i++) {

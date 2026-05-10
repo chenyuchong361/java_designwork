@@ -3,7 +3,7 @@ Script: MindMapNode.java
 Purpose: Represent a mind map node, including hierarchy and configurable visual properties.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-04-28
+Last Updated: 2026-05-10
 Dependencies: java.util
 Usage: Used by the document, UI, and file persistence layers to manage node data.
 
@@ -12,6 +12,7 @@ Changelog:
 - 2026-04-27 陈宗波: Added per-node text, fill, and line color properties for customizable rendering. Original author: chenyuchong. Reason: support user-controlled node styling that can be saved and restored. Impact: backward compatible.
 - 2026-04-28 陈宗波: Reduced styling to fill-only state with no-fill support. Original author: chenyuchong. Reason: keep module styling focused on background fill while allowing border-only display. Impact: backward compatible.
 - 2026-04-28 陈宗波: Added node border, text, and branch style properties for the right-click property panel. Original author: chenyuchong. Reason: match modern mind map styling workflows with localized property editing. Impact: backward compatible.
+- 2026-05-10 Codex: Added per-node manual position offsets for drag-based layout adjustment. Original author: chenyuchong. Reason: allow users to move modules freely while keeping custom positions available to rendering and persistence logic. Impact: backward compatible.
 */
 package com.course.mindmap.model;
 
@@ -34,6 +35,8 @@ public class MindMapNode {
     private int fontSize = DEFAULT_FONT_SIZE;
     private boolean bold;
     private String branchColorHex;
+    private int manualOffsetX;
+    private int manualOffsetY;
     private MindMapNode parent;
     private final List<MindMapNode> children = new ArrayList<>();
 
@@ -119,6 +122,36 @@ public class MindMapNode {
 
     public void setBranchColorHex(String branchColorHex) {
         this.branchColorHex = normalizeColorHex(branchColorHex);
+    }
+
+    public int getManualOffsetX() {
+        return manualOffsetX;
+    }
+
+    public void setManualOffsetX(int manualOffsetX) {
+        this.manualOffsetX = manualOffsetX;
+    }
+
+    public int getManualOffsetY() {
+        return manualOffsetY;
+    }
+
+    public void setManualOffsetY(int manualOffsetY) {
+        this.manualOffsetY = manualOffsetY;
+    }
+
+    public void setManualOffset(int manualOffsetX, int manualOffsetY) {
+        this.manualOffsetX = manualOffsetX;
+        this.manualOffsetY = manualOffsetY;
+    }
+
+    public void translateManualOffset(int deltaX, int deltaY) {
+        this.manualOffsetX += deltaX;
+        this.manualOffsetY += deltaY;
+    }
+
+    public boolean hasManualOffset() {
+        return manualOffsetX != 0 || manualOffsetY != 0;
     }
 
     public MindMapNode getParent() {
