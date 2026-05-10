@@ -19,6 +19,7 @@ Changelog:
 - 2026-04-30 温文辉: Preserved blank-area deselection behavior and kept canvas callbacks aligned with tree synchronization. Original author: chenyuchong. Reason: stabilize task B selection flow across drawing and structure views. Impact: backward compatible.
 - 2026-05-10 Codex: Added direct node dragging with synchronized branch rerouting and position-change callbacks. Original author: chenyuchong. Reason: let users reposition modules freely on the canvas while keeping visual links up to date. Impact: backward compatible.
 - 2026-05-10 Codex: Restricted dragging to the center node only. Original author: chenyuchong. Reason: child-node free dragging produced unstable branch geometry and was replaced with root-only repositioning. Impact: backward compatible.
+- 2026-05-10 Codex: Added centered viewport focusing for selected nodes. Original author: chenyuchong. Reason: keep the root node visible in the middle of the canvas when a document is first opened or recentered. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -51,6 +52,7 @@ import java.util.function.BiConsumer;
 import java.util.function.Consumer;
 import javax.imageio.ImageIO;
 import javax.swing.JPanel;
+import javax.swing.JViewport;
 import javax.swing.SwingUtilities;
 
 public class MindMapCanvas extends JPanel {
@@ -190,6 +192,42 @@ public class MindMapCanvas extends JPanel {
             if (placement != null) {
                 scrollRectToVisible(toViewBounds(placement.copyBounds()));
             }
+        }
+    }
+
+    public void centerNodeInView(MindMapNode node) {
+        if (node == null) {
+            return;
+        }
+
+        LayoutSnapshot.NodePlacement placement = snapshot.getPlacement(node.getId());
+        if (placement == null) {
+            return;
+        }
+
+        Rectangle viewBounds = toViewBounds(placement.copyBounds());
+        Runnable centerTask = () -> {
+            JViewport viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+            if (viewport == null) {
+                scrollRectToVisible(viewBounds);
+                return;
+            }
+
+            Rectangle visibleRect = viewport.getViewRect();
+            int targetX = viewBounds.x + viewBounds.width / 2 - visibleRect.width / 2;
+            int targetY = viewBounds.y + viewBounds.height / 2 - visibleRect.height / 2;
+            int maxX = Math.max(0, getWidth() - visibleRect.width);
+            int maxY = Math.max(0, getHeight() - visibleRect.height);
+            viewport.setViewPosition(new Point(
+                    Math.max(0, Math.min(targetX, maxX)),
+                    Math.max(0, Math.min(targetY, maxY))
+            ));
+        };
+
+        if (isShowing()) {
+            SwingUtilities.invokeLater(centerTask);
+        } else {
+            centerTask.run();
         }
     }
 
