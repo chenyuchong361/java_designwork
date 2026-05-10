@@ -22,6 +22,8 @@ Changelog:
 - 2026-05-10 Codex: Added centered viewport focusing for selected nodes. Original author: chenyuchong. Reason: keep the root node visible in the middle of the canvas when a document is first opened or recentered. Impact: backward compatible.
 - 2026-05-10 Codex: Deferred viewport centering until the real visible extent is ready. Original author: chenyuchong. Reason: early centering used the full virtual canvas size instead of the actual scroll viewport, which left the root node parked in the lower-right area on startup. Impact: backward compatible.
 - 2026-05-10 Codex: Replaced the fixed virtual origin with viewport-based canvas anchoring. Original author: chenyuchong. Reason: the old large translation constants always pushed the root node into the lower-right area on startup instead of drawing it at the visible center. Impact: backward compatible.
+- 2026-05-10 Codex: Added canvas zoom scaling with matching hit-testing, dragging, and viewport centering. Original author: chenyuchong. Reason: the mind map could only render at a fixed size and needed interactive zoom in/out support. Impact: backward compatible.
+- 2026-05-10 Codex: Added Ctrl-plus-wheel zooming with viewport anchoring for mouse wheels and touchpads. Original author: chenyuchong. Reason: users needed to zoom directly from the canvas using standard Ctrl-scroll and two-finger trackpad gestures. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -41,6 +43,7 @@ import java.awt.Rectangle;
 import java.awt.RenderingHints;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseWheelEvent;
 import java.awt.geom.CubicCurve2D;
 import java.awt.geom.RoundRectangle2D;
 import java.awt.image.BufferedImage;
@@ -65,6 +68,9 @@ public class MindMapCanvas extends JPanel {
     private static final int DEFAULT_VIEWPORT_HEIGHT = 760;
     private static final int MIN_WIDTH = 110;
     private static final int MIN_HEIGHT = 38;
+    private static final double MIN_ZOOM_SCALE = 0.6d;
+    private static final double MAX_ZOOM_SCALE = 2.2d;
+    private static final double DEFAULT_ZOOM_SCALE = 1.0d;
     private static final Font BASE_FONT = new Font("Microsoft YaHei UI", Font.PLAIN, 14);
     private static final Color ROOT_FILL_COLOR = new Color(227, 241, 255);
     private static final Color ROOT_BORDER_COLOR = new Color(56, 116, 203);
@@ -87,6 +93,7 @@ public class MindMapCanvas extends JPanel {
     };
     private int offsetX = CANVAS_MARGIN;
     private int offsetY = CANVAS_MARGIN;
+    private double zoomScale = DEFAULT_ZOOM_SCALE;
     private MindMapNode draggedNode;
     private Point lastDragPoint;
     private boolean draggingNode;
@@ -144,8 +151,8 @@ public class MindMapCanvas extends JPanel {
                 }
 
                 Point currentPoint = event.getPoint();
-                int deltaX = currentPoint.x - lastDragPoint.x;
-                int deltaY = currentPoint.y - lastDragPoint.y;
+                int deltaX = toCanvasDelta(currentPoint.x - lastDragPoint.x);
+                int deltaY = toCanvasDelta(currentPoint.y - lastDragPoint.y);
                 if (deltaX == 0 && deltaY == 0) {
                     return;
                 }
@@ -159,6 +166,7 @@ public class MindMapCanvas extends JPanel {
         };
         addMouseListener(mouseAdapter);
         addMouseMotionListener(mouseAdapter);
+        addMouseWheelListener(this::handleMouseWheelZoom);
     }
 
     public void setSelectionListener(Consumer<MindMapNode> selectionListener) {
@@ -185,6 +193,57 @@ public class MindMapCanvas extends JPanel {
         this.document = document;
         this.selectedNode = document == null ? null : document.getRoot();
         refreshLayout();
+    }
+
+    public double getZoomScale() {
+        return zoomScale;
+    }
+
+    public boolean canZoomIn() {
+        return zoomScale < MAX_ZOOM_SCALE;
+    }
+
+    public boolean canZoomOut() {
+        return zoomScale > MIN_ZOOM_SCALE;
+    }
+
+    public boolean zoomIn() {
+        return setZoomScale(zoomScale + 0.1d);
+    }
+
+    public boolean zoomOut() {
+        return setZoomScale(zoomScale - 0.1d);
+    }
+
+    public boolean resetZoom() {
+        return setZoomScale(DEFAULT_ZOOM_SCALE);
+    }
+
+    public boolean zoomByStep(int stepDirection, Point anchorPoint) {
+        if (stepDirection == 0) {
+            return false;
+        }
+        double targetScale = zoomScale + (stepDirection > 0 ? 0.1d : -0.1d);
+        return setZoomScale(targetScale, anchorPoint);
+    }
+
+    public boolean setZoomScale(double zoomScale) {
+        return setZoomScale(zoomScale, null);
+    }
+
+    public boolean setZoomScale(double zoomScale, Point anchorPoint) {
+        double normalizedScale = Math.max(MIN_ZOOM_SCALE, Math.min(MAX_ZOOM_SCALE, zoomScale));
+        if (Math.abs(this.zoomScale - normalizedScale) < 0.0001d) {
+            return false;
+        }
+        Point referencePoint = anchorPoint == null ? null : new Point(anchorPoint);
+        Point canvasPointBeforeZoom = referencePoint == null ? null : toCanvasPoint(referencePoint);
+        this.zoomScale = normalizedScale;
+        refreshLayout();
+        if (referencePoint != null) {
+            centerCanvasPointAtView(referencePoint, canvasPointBeforeZoom);
+        }
+        return true;
     }
 
     public void setSelectedNode(MindMapNode node, boolean scrollToFit) {
@@ -267,6 +326,20 @@ public class MindMapCanvas extends JPanel {
                 && Math.abs(nodeCenterY - viewCenterY) <= CENTERING_TOLERANCE;
     }
 
+    private void handleMouseWheelZoom(MouseWheelEvent event) {
+        if (!event.isControlDown()) {
+            return;
+        }
+        int wheelRotation = event.getWheelRotation();
+        if (wheelRotation == 0) {
+            return;
+        }
+
+        if (zoomByStep(wheelRotation < 0 ? 1 : -1, event.getPoint())) {
+            event.consume();
+        }
+    }
+
     public void refreshLayout() {
         if (document == null) {
             snapshot = new LayoutSnapshot(Map.of());
@@ -286,8 +359,10 @@ public class MindMapCanvas extends JPanel {
         offsetX = Math.max(horizontalAnchor, CANVAS_MARGIN - bounds.x);
         offsetY = Math.max(verticalAnchor, CANVAS_MARGIN - bounds.y);
 
-        int width = Math.max(viewportExtent.width, bounds.x + bounds.width + offsetX + horizontalAnchor);
-        int height = Math.max(viewportExtent.height, bounds.y + bounds.height + offsetY + verticalAnchor);
+        int scaledWidth = (int) Math.ceil((bounds.x + bounds.width + offsetX + horizontalAnchor) * zoomScale);
+        int scaledHeight = (int) Math.ceil((bounds.y + bounds.height + offsetY + verticalAnchor) * zoomScale);
+        int width = Math.max(viewportExtent.width, scaledWidth);
+        int height = Math.max(viewportExtent.height, scaledHeight);
         setPreferredSize(new Dimension(width, height));
         revalidate();
         repaint();
@@ -326,8 +401,8 @@ public class MindMapCanvas extends JPanel {
         refreshLayout();
 
         Rectangle bounds = snapshot.getContentBounds();
-        int width = Math.max(1, bounds.width + CANVAS_MARGIN * 2);
-        int height = Math.max(1, bounds.height + CANVAS_MARGIN * 2);
+        int width = Math.max(1, (int) Math.ceil((bounds.width + CANVAS_MARGIN * 2) * zoomScale));
+        int height = Math.max(1, (int) Math.ceil((bounds.height + CANVAS_MARGIN * 2) * zoomScale));
         int exportOffsetX = CANVAS_MARGIN - bounds.x;
         int exportOffsetY = CANVAS_MARGIN - bounds.y;
         int imageType = "png".equalsIgnoreCase(format)
@@ -362,6 +437,7 @@ public class MindMapCanvas extends JPanel {
 
         Graphics2D translated = (Graphics2D) graphics.create();
         try {
+            translated.scale(zoomScale, zoomScale);
             translated.translate(translateX, translateY);
             drawConnections(translated);
             drawNodes(translated);
@@ -449,7 +525,7 @@ public class MindMapCanvas extends JPanel {
     }
 
     private MindMapNode findNodeAt(Point point) {
-        Point translated = new Point(point.x - offsetX, point.y - offsetY);
+        Point translated = toCanvasPoint(point);
         List<LayoutSnapshot.NodePlacement> placements = new ArrayList<>(snapshot.getPlacements().values());
         for (int index = placements.size() - 1; index >= 0; index--) {
             LayoutSnapshot.NodePlacement placement = placements.get(index);
@@ -477,11 +553,54 @@ public class MindMapCanvas extends JPanel {
 
     private Rectangle toViewBounds(Rectangle nodeBounds) {
         return new Rectangle(
-                nodeBounds.x + offsetX - 20,
-                nodeBounds.y + offsetY - 20,
-                nodeBounds.width + 40,
-                nodeBounds.height + 40
+                toViewCoordinate(nodeBounds.x + offsetX - 20),
+                toViewCoordinate(nodeBounds.y + offsetY - 20),
+                Math.max(1, toViewLength(nodeBounds.width + 40)),
+                Math.max(1, toViewLength(nodeBounds.height + 40))
         );
+    }
+
+    private Point toCanvasPoint(Point point) {
+        int translatedX = (int) Math.round(point.x / zoomScale) - offsetX;
+        int translatedY = (int) Math.round(point.y / zoomScale) - offsetY;
+        return new Point(translatedX, translatedY);
+    }
+
+    private int toCanvasDelta(int delta) {
+        return (int) Math.round(delta / zoomScale);
+    }
+
+    private int toViewCoordinate(int value) {
+        return (int) Math.round(value * zoomScale);
+    }
+
+    private int toViewLength(int value) {
+        return (int) Math.round(value * zoomScale);
+    }
+
+    private void centerCanvasPointAtView(Point referencePoint, Point canvasPoint) {
+        if (referencePoint == null || canvasPoint == null) {
+            return;
+        }
+        JViewport viewport = (JViewport) SwingUtilities.getAncestorOfClass(JViewport.class, this);
+        if (viewport == null) {
+            return;
+        }
+
+        int targetViewX = toViewCoordinate(canvasPoint.x + offsetX);
+        int targetViewY = toViewCoordinate(canvasPoint.y + offsetY);
+        Point newViewPosition = new Point(
+                targetViewX - referencePoint.x,
+                targetViewY - referencePoint.y
+        );
+
+        Dimension extent = viewport.getExtentSize();
+        int maxX = Math.max(0, getWidth() - extent.width);
+        int maxY = Math.max(0, getHeight() - extent.height);
+        viewport.setViewPosition(new Point(
+                Math.max(0, Math.min(newViewPosition.x, maxX)),
+                Math.max(0, Math.min(newViewPosition.y, maxY))
+        ));
     }
 
     private Dimension measureNode(MindMapNode node) {

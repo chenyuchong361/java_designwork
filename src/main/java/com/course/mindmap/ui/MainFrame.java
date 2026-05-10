@@ -138,6 +138,9 @@ public class MainFrame extends JFrame {
     private final JButton renameNodeButton = new JButton("重命名");
     private final JButton clearSelectionButton = new JButton("取消选中");
     private final JButton deleteNodeButton = new JButton("删除节点");
+    private final JButton zoomOutButton = new JButton("缩小");
+    private final JButton resetZoomButton = new JButton("100%");
+    private final JButton zoomInButton = new JButton("放大");
     private final JComboBox<LayoutMode> layoutModeBox = new JComboBox<>(LayoutMode.values());
     private final Map<String, TreePath> treePathsByNodeId = new HashMap<>();
     private final Deque<UndoSnapshot> undoStack = new ArrayDeque<>();
@@ -248,6 +251,18 @@ public class MainFrame extends JFrame {
         toolBar.add(new JLabel("布局方式: "));
         layoutModeBox.setMaximumSize(new Dimension(150, 28));
         toolBar.add(layoutModeBox);
+        zoomOutButton.setToolTipText("缩小思维导图");
+        zoomOutButton.addActionListener(event -> zoomOutCanvas());
+        toolBar.add(zoomOutButton);
+
+        resetZoomButton.setToolTipText("恢复为 100% 缩放");
+        resetZoomButton.addActionListener(event -> resetCanvasZoom());
+        toolBar.add(resetZoomButton);
+
+        zoomInButton.setToolTipText("放大思维导图");
+        zoomInButton.addActionListener(event -> zoomInCanvas());
+        toolBar.add(zoomInButton);
+
         toolBar.add(Box.createHorizontalGlue());
 
         JButton helpButton = createToolbarButton("使用说明", "查看当前演示与操作说明", this::showHelp);
@@ -317,6 +332,7 @@ public class MainFrame extends JFrame {
         canvas.setNodePositionChangeListener(this::handleNodePositionChange);
         canvas.setNodeContextMenuListener((node, point) -> showCanvasNodePropertyPopup(point));
         bindUndoShortcut();
+        bindZoomShortcuts();
 
         outlineTree.addTreeSelectionListener(event -> {
             if (syncingSelection) {
@@ -369,6 +385,26 @@ public class MainFrame extends JFrame {
             @Override
             public void actionPerformed(java.awt.event.ActionEvent event) {
                 undoLastAction();
+            }
+        });
+    }
+
+    private void bindZoomShortcuts() {
+        bindShortcut("zoom-in-equals", KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, InputEvent.CTRL_DOWN_MASK), this::zoomInCanvas);
+        bindShortcut("zoom-in-plus", KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, InputEvent.CTRL_DOWN_MASK), this::zoomInCanvas);
+        bindShortcut("zoom-in-numpad", KeyStroke.getKeyStroke(KeyEvent.VK_ADD, InputEvent.CTRL_DOWN_MASK), this::zoomInCanvas);
+        bindShortcut("zoom-out-minus", KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, InputEvent.CTRL_DOWN_MASK), this::zoomOutCanvas);
+        bindShortcut("zoom-out-numpad", KeyStroke.getKeyStroke(KeyEvent.VK_SUBTRACT, InputEvent.CTRL_DOWN_MASK), this::zoomOutCanvas);
+        bindShortcut("zoom-reset", KeyStroke.getKeyStroke(KeyEvent.VK_0, InputEvent.CTRL_DOWN_MASK), this::resetCanvasZoom);
+        bindShortcut("zoom-reset-numpad", KeyStroke.getKeyStroke(KeyEvent.VK_NUMPAD0, InputEvent.CTRL_DOWN_MASK), this::resetCanvasZoom);
+    }
+
+    private void bindShortcut(String actionKey, KeyStroke keyStroke, Runnable action) {
+        getRootPane().getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(keyStroke, actionKey);
+        getRootPane().getActionMap().put(actionKey, new AbstractAction() {
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent event) {
+                action.run();
             }
         });
     }
@@ -1167,10 +1203,14 @@ public class MainFrame extends JFrame {
         renameNodeButton.setEnabled(selectedNode != null);
         clearSelectionButton.setEnabled(selectedNode != null);
         deleteNodeButton.setEnabled(selectedNode != null && !selectedNode.isRoot());
+        zoomOutButton.setEnabled(canvas.canZoomOut());
+        zoomInButton.setEnabled(canvas.canZoomIn());
+        resetZoomButton.setEnabled(Math.abs(canvas.getZoomScale() - 1.0d) > 0.0001d);
 
         String fileText = currentFile == null ? "未保存" : currentFile.getName();
         String selectionText = selectedNode == null ? "未选中节点" : "当前节点: " + selectedNode.getText();
         int totalNodes = document == null ? 0 : document.getRoot().countNodes();
+        String zoomText = " | 缩放: " + Math.round(canvas.getZoomScale() * 100) + "%";
         String dirtyText = dirty ? " | 有未保存修改" : "";
         String hintText = selectedNode == null ? " | 提示: 可在画布或结构区选择节点" : " | 提示: 双击可重命名";
         statusLabel.setText(selectionText + " | 节点数: " + totalNodes + " | 文件: " + fileText + dirtyText + hintText);
@@ -1301,6 +1341,31 @@ public class MainFrame extends JFrame {
     private void markDocumentDirty() {
         if (!dirty) {
             dirty = true;
+        }
+        updateWindowState();
+    }
+
+    private void zoomInCanvas() {
+        if (canvas.zoomIn()) {
+            refreshAfterZoom();
+        }
+    }
+
+    private void zoomOutCanvas() {
+        if (canvas.zoomOut()) {
+            refreshAfterZoom();
+        }
+    }
+
+    private void resetCanvasZoom() {
+        if (canvas.resetZoom()) {
+            refreshAfterZoom();
+        }
+    }
+
+    private void refreshAfterZoom() {
+        if (selectedNode != null) {
+            canvas.centerNodeInView(selectedNode);
         }
         updateWindowState();
     }
