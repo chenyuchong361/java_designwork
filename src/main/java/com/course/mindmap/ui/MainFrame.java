@@ -3,7 +3,7 @@ Script: MainFrame.java
 Purpose: Build the main application window and coordinate mind map editing, file actions, and node property editing.
 Author: chenyuchong
 Created: 2026-03-14
-Last Updated: 2026-05-10
+Last Updated: 2026-05-11
 Dependencies: Java Swing, AWT, java.io.File, com.course.mindmap.io, com.course.mindmap.model
 Usage: Launched by MindMapApp to host menus, toolbar actions, canvas interactions, and file operations.
 
@@ -27,6 +27,7 @@ Changelog:
 - 2026-05-10 Codex: Deferred the initial root-centering step until the window is shown. Original author: chenyuchong. Reason: first-render recentering could run before the viewport size stabilized, leaving the root node in the lower-right corner on startup. Impact: backward compatible.
 - 2026-05-10 Codex: Decoupled root focusing from generic scroll-to-fit selection. Original author: chenyuchong. Reason: the generic selection path scrolled the root node only into the viewport corner before the explicit centering step could finish, which left startup positioning stuck in the lower-right area. Impact: backward compatible.
 - 2026-05-10 Codex: Added Ctrl+Z undo support for node edits, style changes, layout switching, and root dragging. Original author: chenyuchong. Reason: let users roll back the previous editing step without manually reconstructing the prior state. Impact: backward compatible.
+- 2026-05-11 陈宗波: Added an overwrite confirmation before saving a .dt file to an existing chosen path. Original author: chenyuchong. Reason: prevent new or save-as mind maps from silently replacing same-named files in the target folder. Impact: backward compatible.
 */
 package com.course.mindmap.ui;
 
@@ -468,13 +469,21 @@ public class MainFrame extends JFrame {
         }
 
         File targetFile = currentFile;
-        if (forceChooser || targetFile == null) {
+        boolean selectedFromChooser = forceChooser || targetFile == null;
+        if (selectedFromChooser) {
             JFileChooser chooser = createMindMapChooser();
             chooser.setSelectedFile(new File(defaultFileName() + ".dt"));
-            if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
-                return false;
+            while (true) {
+                if (chooser.showSaveDialog(this) != JFileChooser.APPROVE_OPTION) {
+                    return false;
+                }
+
+                targetFile = ensureExtension(chooser.getSelectedFile(), "dt");
+                chooser.setSelectedFile(targetFile);
+                if (confirmOverwrite(targetFile, "该位置已经存在同名思维导图文件，是否覆盖？")) {
+                    break;
+                }
             }
-            targetFile = ensureExtension(chooser.getSelectedFile(), "dt");
         }
 
         try {
