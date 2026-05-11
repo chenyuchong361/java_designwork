@@ -1,6 +1,4 @@
 target/
-dist/
-.m2/
 .idea/
 *.iml
 *.class
